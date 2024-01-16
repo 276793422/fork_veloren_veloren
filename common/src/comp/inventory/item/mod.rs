@@ -1581,11 +1581,85 @@ impl From<&ItemDefinitionId<'_>> for ItemDefinitionIdOwned {
 mod tests {
     use super::*;
 
+    use std::{fs, path::Path};
+    use ron;
+    use std::io;
+    use std::io::Read;
+    use curl::easy::Easy;
+    
+    fn traverse_directory(dir_path: &str) -> usize {
+        let entries = fs::read_dir(dir_path).unwrap();
+        let mut n_count: usize = 0;
+
+        for entry in entries {
+            let entry = entry.unwrap();
+            let pathbuf = entry.path();
+            let path = Path::new(pathbuf.as_path());
+
+            if path.is_dir() {
+                // println!("目录： {}", path.display());
+                n_count = n_count + traverse_directory(path.as_os_str().to_str().unwrap());
+            } else {
+                let file_path = path.display();
+                println!("文件： {}", file_path);
+
+                let source = fs::File::open(file_path.to_string()).unwrap();
+                let arr = ron::de::from_reader(source);
+                let old: ItemDef = arr.unwrap();
+
+                println!("\t  name        : {}", old.name);
+                println!("\t  description : {}", old.description);
+                
+                n_count = n_count + 1;
+            }
+        }
+
+        n_count
+    }
+
+    fn post_request(url: &str, body: &str) -> Result<String, String> {
+        let mut data = body.as_bytes();
+        let mut easy = Easy::new();
+
+        easy.url(url).unwrap();
+        easy.post(true).unwrap();
+        easy.post_fields_copy(body.as_bytes()).unwrap();
+
+        let mut buffer = Vec::new();
+        {
+            let mut transfer = easy.transfer();
+            transfer.write_function(|data| {
+                buffer.extend_from_slice(data);
+                Ok(data.len())
+            }).unwrap();
+            transfer.perform().unwrap();
+        }
+    
+        let response_code = &easy.response_code().unwrap_or(500);
+        
+        println!("[DEBUG] POST {}: ({}) {:?}", url, response_code, String::from_utf8(buffer.clone()));
+    
+        Ok(String::from_utf8(buffer).expect("返回出错"))
+    }
+
     #[test]
     fn test_assets_items() {
+        /*
         let ids = all_item_defs_expect();
         for item in ids.iter().map(|id| Item::new_from_asset_expect(id)) {
             drop(item)
         }
+        */
+        
+        let dir_path = "E:/Game/veloren_root/veloren/assets/common/items";
+        let mut n_count = traverse_directory(&dir_path);
+
+        println!("Count : {}", n_count);
+
+        let url = "https://luckycola.com.cn/tools/fanyi";
+        let body = "ColaKey=YycB7EitYKHtHw1705157916874E5Lh0f0KVZ&text=start&fromlang=EN&tolang=ZH";
+        let response = post_request(url, body);
+        println!("{}", response.expect("post_request value"));
+        // let response = post("Response: {}", response);
     }
 }

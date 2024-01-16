@@ -36,3 +36,5 @@ hud-trade-tooltip_hint_2 = <单击Ctrl按钮可以自动平衡.>
 hud-trade-your_offer = 你的报价
 hud-trade-their_offer = 对方报价
 hud-trade-amount_input = 选择一个项目
+
+hud-trade-item_amount = 数量

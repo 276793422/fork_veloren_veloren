@@ -1,6 +1,7 @@
 mod ui;
 
 use crate::{
+    menu::{main::rand_bg_image_spec, server_info::ServerInfoState},
     render::{Drawer, GlobalsBindGroup},
     scene::simple::{self as scene, Scene},
     session::SessionState,
@@ -25,10 +26,12 @@ pub struct CharSelectionState {
 impl CharSelectionState {
     /// Create a new `CharSelectionState`.
     pub fn new(global_state: &mut GlobalState, client: Rc<RefCell<Client>>) -> Self {
+        let sprite_render_context = (global_state.lazy_init)(global_state.window.renderer_mut());
         let scene = Scene::new(
             global_state.window.renderer_mut(),
-            Some("fixture.selection_bg"),
-            &client.borrow(),
+            &mut client.borrow_mut(),
+            &global_state.settings,
+            sprite_render_context,
         );
         let char_selection_ui = CharSelectionUi::new(global_state, &client.borrow());
 
@@ -59,6 +62,8 @@ impl CharSelectionState {
             })
             .unwrap_or_default()
     }
+
+    pub fn client(&self) -> &RefCell<Client> { &self.client }
 }
 
 impl PlayState for CharSelectionState {
@@ -158,6 +163,28 @@ impl PlayState for CharSelectionState {
                             Rc::clone(&self.client),
                         )));
                     },
+                    ui::Event::ShowRules => {
+                        let client = self.client.borrow();
+
+                        let server_info = client.server_info().clone();
+                        let server_description = client.server_description().clone();
+
+                        let char_select =
+                            CharSelectionState::new(global_state, Rc::clone(&self.client));
+
+                        let new_state = ServerInfoState::try_from_server_info(
+                            global_state,
+                            rand_bg_image_spec(),
+                            char_select,
+                            server_info,
+                            server_description,
+                            true,
+                        )
+                        .map(|s| Box::new(s) as _)
+                        .unwrap_or_else(|s| Box::new(s) as _);
+
+                        return PlayStateResult::Switch(new_state);
+                    },
                     ui::Event::ClearCharacterListError => {
                         self.char_selection_ui.error = None;
                     },
@@ -199,8 +226,12 @@ impl PlayState for CharSelectionState {
                         as f32,
                 };
 
-                self.scene
-                    .maintain(global_state.window.renderer_mut(), scene_data, loadout);
+                self.scene.maintain(
+                    global_state.window.renderer_mut(),
+                    scene_data,
+                    loadout,
+                    &client,
+                );
             }
 
             // Tick the client (currently only to keep the connection alive).

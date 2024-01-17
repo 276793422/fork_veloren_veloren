@@ -1740,8 +1740,6 @@ mod tests {
 
     use std::{fs, path::Path};
     use ron;
-    use std::io;
-    use std::io::Read;
     use curl::easy::Easy;
     
     fn traverse_directory(dir_path: &str) -> usize {
@@ -1762,10 +1760,10 @@ mod tests {
 
                 let source = fs::File::open(file_path.to_string()).unwrap();
                 let arr = ron::de::from_reader(source);
-                let old: ItemDef = arr.unwrap();
+                let old: RawItemDef = arr.unwrap();
 
-                println!("\t  name        : {}", old.name);
-                println!("\t  description : {}", old.description);
+                println!("\t  name        : {}", old.legacy_name);
+                println!("\t  description : {}", old.legacy_description);
                 
                 n_count = n_count + 1;
             }
@@ -1809,7 +1807,7 @@ mod tests {
         */
         
         let dir_path = "E:/Game/veloren_root/veloren/assets/common/items";
-        let mut n_count = traverse_directory(&dir_path);
+        let n_count = traverse_directory(&dir_path);
 
         println!("Count : {}", n_count);
 

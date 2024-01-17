@@ -1773,7 +1773,7 @@ mod tests {
     }
 
     fn post_request(url: &str, body: &str) -> Result<String, String> {
-        let mut data = body.as_bytes();
+        let data = body.as_bytes();
         let mut easy = Easy::new();
 
         easy.url(url).unwrap();

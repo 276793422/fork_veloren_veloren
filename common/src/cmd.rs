@@ -219,7 +219,9 @@ lazy_static! {
 
     static ref ROLES: Vec<String> = ["admin", "moderator"].iter().copied().map(Into::into).collect();
 
-    /// List of item specifiers. Useful for tab completing
+    /// List of item's asset specifiers. Useful for tab completing.
+    /// Doesn't cover all items (like modulars), includes "fake" items like
+    /// TagExamples.
     pub static ref ITEM_SPECS: Vec<String> = {
         let mut items = try_all_item_defs()
             .unwrap_or_else(|e| {
@@ -240,13 +242,16 @@ lazy_static! {
     };
 
     pub static ref KITS: Vec<String> = {
-        if let Ok(kits) = KitManifest::load_and_combine(KIT_MANIFEST_PATH) {
+        let mut kits = if let Ok(kits) = KitManifest::load_and_combine(KIT_MANIFEST_PATH) {
             let mut kits = kits.read().0.keys().cloned().collect::<Vec<String>>();
             kits.sort();
             kits
         } else {
             Vec::new()
-        }
+        };
+        kits.push("all".to_owned());
+
+        kits
     };
 
     static ref PRESETS: HashMap<String, Vec<(Skill, u8)>> = {
@@ -651,9 +656,7 @@ impl ServerChatCommand {
                 "Make a sprite at your location",
                 Some(Admin),
             ),
-            ServerChatCommand::Motd => {
-                cmd(vec![Message(Optional)], "View the server description", None)
-            },
+            ServerChatCommand::Motd => cmd(vec![], "View the server description", None),
             ServerChatCommand::Object => cmd(
                 vec![Enum("object", OBJECTS.clone(), Required)],
                 "Spawn an object",
@@ -720,7 +723,7 @@ impl ServerChatCommand {
                 Some(Moderator),
             ),
             ServerChatCommand::SetMotd => cmd(
-                vec![Message(Optional)],
+                vec![Any("locale", Optional), Message(Optional)],
                 "Set the server description",
                 Some(Admin),
             ),

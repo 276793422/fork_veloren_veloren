@@ -1801,14 +1801,7 @@ mod tests {
     }
 
     #[test]
-    fn test_assets_items() {
-        /*
-        let ids = all_item_defs_expect();
-        for item in ids.iter().map(|id| Item::new_from_asset_expect(id)) {
-            drop(item)
-        }
-        */
-        
+    fn test_assets_items_iterator() {
         let dir_path = "E:/Game/veloren_root/veloren/assets/common/items";
         let n_count = traverse_directory(&dir_path);
 
@@ -1819,6 +1812,14 @@ mod tests {
         let response = post_request(url, body);
         println!("{}", response.expect("post_request value"));
         // let response = post("Response: {}", response);
+    }
+
+    #[test]
+    fn test_assets_items() {
+        let ids = all_item_defs_expect();
+        for item in ids.iter().map(|id| Item::new_from_asset_expect(id)) {
+            drop(item)
+        }
     }
 
     #[test]

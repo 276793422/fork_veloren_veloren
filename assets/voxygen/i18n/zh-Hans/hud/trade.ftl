@@ -37,4 +37,6 @@ hud-trade-your_offer = 你的报价
 hud-trade-their_offer = 对方报价
 hud-trade-amount_input = 选择一个项目
 
+hud-trade-indicator_cash = 价值：{ $cash }
+
 hud-trade-item_amount = 数量

@@ -6115,6 +6115,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "stdext"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f3b6b32ae82412fb897ef134867d53a294f57ba5b758f06d71e865352c3e207"
+
+[[package]]
 name = "stdweb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6786,7 +6792,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "rand 0.8.5",
  "static_assertions",
 ]
@@ -7019,6 +7025,7 @@ name = "veloren-common"
 version = "0.10.0"
 dependencies = [
  "approx 0.5.1",
+ "backtrace",
  "bitflags 2.4.0",
  "chrono",
  "chrono-tz",
@@ -7052,6 +7059,7 @@ dependencies = [
  "slotmap 1.0.6",
  "specs",
  "spin_sleep",
+ "stdext",
  "strum",
  "tracing",
  "tracing-subscriber",

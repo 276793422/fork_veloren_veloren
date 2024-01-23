@@ -263,15 +263,35 @@ impl<'a> Trade<'a> {
             .color(Color::Rgba(1.0, 1.0, 1.0, 1.0))
             .set(state.ids.offer_headers[who], ui);
 
-        /*
-        let mut invslots_array: Vec<_> = trade.offers[who].iter().map(|(k, v)| (*k, *v)).collect();
-        invslots_array.sort();
-        info!("item {:?}", invslots_array);
-        */
-        
+        let ecs = self.client.state().ecs();
+        let inventories = specs::WorldExt::read_component::<common::comp::Inventory>(ecs);
+        let get_inventory = |uid: common::uid::Uid| {
+            if let Some(entity) = ecs.entity_from_uid(uid) {
+                inventories.get(entity)
+            } else {
+                None
+            }
+        };
+        let mut r_inventories = [None, None];
+        for (i, party) in trade.parties.iter().enumerate() {
+            match get_inventory(*party) {
+                Some(inventory) => {
+                    r_inventories[i] = Some(common::trade::ReducedInventory::from(inventory))
+                },
+                None => todo!(),
+            };
+        }
+
+        let balance_ret = prices.clone().expect("error 1").balance(&trade.offers, &r_inventories, who, ours);
+        let balance0  = match balance_ret {
+                None => 0.0,
+                Some(balance0) => balance0,
+            };
+        //tracing::info!("who : {} , balance0 {:?}", who, balance0);
+
         let indicator_cash = self.localized_strings
             .get_msg_ctx("hud-trade-indicator_cash", &i18n::fluent_args! {
-                "cash" => 0.1,
+                "cash" => format!("{:.2}", balance0 * 10.0),
             });
 
         Text::new(&indicator_cash)

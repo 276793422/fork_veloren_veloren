@@ -78,8 +78,7 @@ use crate::{
     },
     settings::chat::ChatFilter,
     ui::{
-        self, fonts::Fonts, img_ids::Rotations, slot, slot::SlotKey, Graphic, Ingameable,
-        ScaleMode, Ui,
+        fonts::Fonts, img_ids::Rotations, slot, slot::SlotKey, Graphic, Ingameable, ScaleMode, Ui,
     },
     window::Event as WinEvent,
     GlobalState,
@@ -1144,32 +1143,6 @@ impl Show {
         self.social_search_key = search_key;
     }
 
-    /// If all of the menus are closed, adjusts coordinates of cursor to center
-    /// of screen
-    fn toggle_cursor_on_menu_close(&self, global_state: &mut GlobalState, ui: &mut Ui) {
-        if !self.bag
-            && !self.trade
-            && !self.esc_menu
-            && !self.map
-            && !self.social
-            && !self.quest
-            && !self.crafting
-            && !self.diary
-            && !self.help
-            && !self.intro
-            && global_state.window.is_cursor_grabbed()
-        {
-            ui.handle_event(ui::Event(
-                conrod_core::input::Motion::MouseCursor { x: 0.0, y: 0.0 }.into(),
-            ));
-
-            //TODO: An underlying OS call in winit is causing the camera to jump upon the
-            // next mouse movement event in macos https://github.com/rust-windowing/winit/issues/999
-            #[cfg(not(target_os = "macos"))]
-            global_state.window.center_cursor();
-        }
-    }
-
     pub fn update_map_markers(&mut self, event: comp::MapMarkerUpdate) {
         match event {
             comp::MapMarkerUpdate::Owned(event) => match event {
@@ -2069,9 +2042,14 @@ impl Hud {
                 && let Some((mat, _, _)) = pos.get_block_and_transform(
                     &ecs.read_resource(),
                     &ecs.read_resource(),
-                    |e| ecs.read_storage::<vcomp::Interpolated>().get(e).map(|interpolated| (comp::Pos(interpolated.pos), interpolated.ori)),
+                    |e| {
+                        ecs.read_storage::<vcomp::Interpolated>()
+                            .get(e)
+                            .map(|interpolated| (comp::Pos(interpolated.pos), interpolated.ori))
+                    },
                     &ecs.read_storage(),
-                ) {
+                )
+            {
                 let overitem_id = overitem_walker.next(
                     &mut self.ids.overitems,
                     &mut ui_widgets.widget_id_generator(),
@@ -2156,7 +2134,12 @@ impl Hud {
                     BlockInteraction::Mount => {
                         let key = match block.get_sprite() {
                             Some(SpriteKind::Helm) => "hud-steer",
-                            Some(SpriteKind::Bed | SpriteKind::Bedroll | SpriteKind::BedrollSnow | SpriteKind::BedrollPirate) => "hud-lay",
+                            Some(
+                                SpriteKind::Bed
+                                | SpriteKind::Bedroll
+                                | SpriteKind::BedrollSnow
+                                | SpriteKind::BedrollPirate,
+                            ) => "hud-lay",
                             _ => "hud-sit",
                         };
                         vec![(Some(GameInput::Mount), i18n.get_msg(key).to_string())]
@@ -2168,7 +2151,12 @@ impl Hud {
                     // TODO: change to turn on/turn off?
                     BlockInteraction::LightToggle(enable) => vec![(
                         Some(GameInput::Interact),
-                        i18n.get_msg(if *enable { "hud-activate" } else { "hud-deactivate" }).to_string(),
+                        i18n.get_msg(if *enable {
+                            "hud-activate"
+                        } else {
+                            "hud-deactivate"
+                        })
+                        .to_string(),
                     )],
                 };
 
@@ -2197,7 +2185,11 @@ impl Hud {
                 // TODO: Handle this better. The items returned from `try_reclaim_from_block`
                 // are based on rng. We probably want some function to get only gauranteed items
                 // from `LootSpec`.
-                else if let Some((amount, mut item)) = Item::try_reclaim_from_block(*block).into_iter().flatten().next() {
+                else if let Some((amount, mut item)) = Item::try_reclaim_from_block(*block)
+                    .into_iter()
+                    .flatten()
+                    .next()
+                {
                     item.set_amount(amount.clamp(1, item.max_amount()))
                         .expect("amount >= 1 and <= max_amount is always a valid amount");
                     make_overitem(
@@ -2277,7 +2269,8 @@ impl Hud {
                                 "hud-activate"
                             } else {
                                 "hud-use"
-                            }).to_string(),
+                            })
+                            .to_string(),
                         )],
                     )
                     .x_y(0.0, 100.0)
@@ -3887,9 +3880,18 @@ impl Hud {
         'slot_events: for event in self.slot_manager.maintain(ui_widgets) {
             use slots::{AbilitySlot, InventorySlot, SlotKind::*};
             let to_slot = |slot_kind| match slot_kind {
+                Inventory(
+                    i @ InventorySlot {
+                        slot: Slot::Inventory(_) | Slot::Overflow(_),
+                        ours: true,
+                        ..
+                    },
+                ) => Some(i.slot),
                 Inventory(InventorySlot {
-                    slot, ours: true, ..
-                }) => Some(Slot::Inventory(slot)),
+                    slot: Slot::Equip(_),
+                    ours: true,
+                    ..
+                }) => None,
                 Inventory(InventorySlot { ours: false, .. }) => None,
                 Equip(e) => Some(Slot::Equip(e)),
                 Hotbar(_) => None,
@@ -3913,21 +3915,27 @@ impl Hud {
                         Hotbar(h),
                     ) = (a, b)
                     {
-                        if let Some(item) = inventories
-                            .get(info.viewpoint_entity)
-                            .and_then(|inv| inv.get(slot))
-                        {
-                            self.hotbar.add_inventory_link(h, item);
-                            events.push(Event::ChangeHotbarState(Box::new(self.hotbar.to_owned())));
+                        if let Slot::Inventory(slot) = slot {
+                            if let Some(item) = inventories
+                                .get(info.viewpoint_entity)
+                                .and_then(|inv| inv.get(slot))
+                            {
+                                self.hotbar.add_inventory_link(h, item);
+                                events.push(Event::ChangeHotbarState(Box::new(
+                                    self.hotbar.to_owned(),
+                                )));
+                            }
                         }
                     } else if let (Hotbar(a), Hotbar(b)) = (a, b) {
                         self.hotbar.swap(a, b);
                         events.push(Event::ChangeHotbarState(Box::new(self.hotbar.to_owned())));
                     } else if let (Inventory(i), Trade(t)) = (a, b) {
                         if i.ours == t.ours {
-                            if let Some(inventory) = inventories.get(t.entity) {
+                            if let (Some(inventory), Slot::Inventory(slot)) =
+                                (inventories.get(t.entity), i.slot)
+                            {
                                 events.push(Event::TradeAction(TradeAction::AddItem {
-                                    item: i.slot,
+                                    item: slot,
                                     quantity: i.amount(inventory).unwrap_or(1),
                                     ours: i.ours,
                                 }));
@@ -3973,18 +3981,20 @@ impl Hud {
                             (AbilitySlot::Ability(_), AbilitySlot::Ability(_)) => {},
                         }
                     } else if let (Inventory(i), Crafting(c)) = (a, b) {
-                        // Add item to crafting input
-                        if inventories
-                            .get(info.viewpoint_entity)
-                            .and_then(|inv| inv.get(i.slot))
-                            .map_or(false, |item| {
-                                (c.requirement)(item, client.component_recipe_book(), c.info)
-                            })
-                        {
-                            self.show
-                                .crafting_fields
-                                .recipe_inputs
-                                .insert(c.index, Slot::Inventory(i.slot));
+                        if let Slot::Inventory(slot) = i.slot {
+                            // Add item to crafting input
+                            if inventories
+                                .get(info.viewpoint_entity)
+                                .and_then(|inv| inv.get(slot))
+                                .map_or(false, |item| {
+                                    (c.requirement)(item, client.component_recipe_book(), c.info)
+                                })
+                            {
+                                self.show
+                                    .crafting_fields
+                                    .recipe_inputs
+                                    .insert(c.index, i.slot);
+                            }
                         }
                     } else if let (Equip(e), Crafting(c)) = (a, b) {
                         // Add item to crafting input
@@ -4055,21 +4065,27 @@ impl Hud {
                             bypass_dialog: false,
                         });
                     } else if let (Inventory(i), Hotbar(h)) = (a, b) {
-                        if let Some(item) = inventories
-                            .get(info.viewpoint_entity)
-                            .and_then(|inv| inv.get(i.slot))
-                        {
-                            self.hotbar.add_inventory_link(h, item);
-                            events.push(Event::ChangeHotbarState(Box::new(self.hotbar.to_owned())));
+                        if let Slot::Inventory(slot) = i.slot {
+                            if let Some(item) = inventories
+                                .get(info.viewpoint_entity)
+                                .and_then(|inv| inv.get(slot))
+                            {
+                                self.hotbar.add_inventory_link(h, item);
+                                events.push(Event::ChangeHotbarState(Box::new(
+                                    self.hotbar.to_owned(),
+                                )));
+                            }
                         }
                     } else if let (Hotbar(a), Hotbar(b)) = (a, b) {
                         self.hotbar.swap(a, b);
                         events.push(Event::ChangeHotbarState(Box::new(self.hotbar.to_owned())));
                     } else if let (Inventory(i), Trade(t)) = (a, b) {
                         if i.ours == t.ours {
-                            if let Some(inventory) = inventories.get(t.entity) {
+                            if let (Some(inventory), Slot::Inventory(slot)) =
+                                (inventories.get(t.entity), i.slot)
+                            {
                                 events.push(Event::TradeAction(TradeAction::AddItem {
-                                    item: i.slot,
+                                    item: slot,
                                     quantity: i.amount(inventory).unwrap_or(1) / 2,
                                     ours: i.ours,
                                 }));
@@ -4253,24 +4269,26 @@ impl Hud {
                         match slot {
                             Inventory(i) => {
                                 if let Some(inventory) = inventories.get(i.entity) {
-                                    let mut quantity = 1;
-                                    if auto_quantity {
-                                        do_auto_quantity(
-                                            inventory,
-                                            i.slot,
-                                            i.ours,
-                                            false,
-                                            &mut quantity,
-                                        );
-                                        let inv_quantity = i.amount(inventory).unwrap_or(1);
-                                        quantity = quantity.min(inv_quantity);
-                                    }
+                                    if let Slot::Inventory(slot) = i.slot {
+                                        let mut quantity = 1;
+                                        if auto_quantity {
+                                            do_auto_quantity(
+                                                inventory,
+                                                slot,
+                                                i.ours,
+                                                false,
+                                                &mut quantity,
+                                            );
+                                            let inv_quantity = i.amount(inventory).unwrap_or(1);
+                                            quantity = quantity.min(inv_quantity);
+                                        }
 
-                                    events.push(Event::TradeAction(TradeAction::AddItem {
-                                        item: i.slot,
-                                        quantity,
-                                        ours: i.ours,
-                                    }));
+                                        events.push(Event::TradeAction(TradeAction::AddItem {
+                                            item: slot,
+                                            quantity,
+                                            ours: i.ours,
+                                        }));
+                                    }
                                 }
                             },
                             Trade(t) => {
@@ -4530,7 +4548,7 @@ impl Hud {
         ) {
             use slots::InventorySlot;
             if let Some(slots::SlotKind::Inventory(InventorySlot {
-                slot: i,
+                slot: Slot::Inventory(i),
                 ours: true,
                 ..
             })) = slot_manager.selected()
@@ -4688,7 +4706,7 @@ impl Hud {
                     true
                 };
 
-                let matching_key = match key {
+                match key {
                     GameInput::Command if state => {
                         self.force_chat_input = Some("/".to_owned());
                         self.force_chat_cursor = Some(Index { line: 0, char: 1 });
@@ -4784,13 +4802,7 @@ impl Hud {
                             false
                         }
                     },
-                };
-
-                // When a player closes all menus, resets the cursor
-                // to the center of the screen
-                self.show
-                    .toggle_cursor_on_menu_close(global_state, &mut self.ui);
-                matching_key
+                }
             },
             // Else the player is typing in chat
             WinEvent::InputUpdate(_key, _) => self.typing(),

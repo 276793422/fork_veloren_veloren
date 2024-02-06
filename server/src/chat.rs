@@ -17,12 +17,14 @@ pub struct PlayerInfo {
     alias: String,
 }
 
+/// Enum representing death reasons
+///
+/// All variants should be strictly typed, no string content.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum KillSource {
     Player(PlayerInfo, KillType),
     NonPlayer(String, KillType),
     NonExistent(KillType),
-    Environment(String),
     FallDamage,
     Suicide,
     Other,
@@ -160,7 +162,6 @@ impl ChatExporter {
                     },
                     comp::chat::KillSource::NonPlayer(str, t) => KillSource::NonPlayer(str, t),
                     comp::chat::KillSource::NonExistent(t) => KillSource::NonExistent(t),
-                    comp::chat::KillSource::Environment(str) => KillSource::Environment(str),
                     comp::chat::KillSource::FallDamage => KillSource::FallDamage,
                     comp::chat::KillSource::Suicide => KillSource::Suicide,
                     comp::chat::KillSource::Other => KillSource::Other,
@@ -220,7 +221,9 @@ impl ChatForwarder {
         while let Some(msg) = self.chat_r.recv().await {
             let drop_older_than = msg.time.sub(self.keep_duration);
             let mut messages = self.messages.lock().await;
-            while let Some(msg) = messages.front() && msg.time < drop_older_than {
+            while let Some(msg) = messages.front()
+                && msg.time < drop_older_than
+            {
                 messages.pop_front();
             }
             messages.push_back(msg);

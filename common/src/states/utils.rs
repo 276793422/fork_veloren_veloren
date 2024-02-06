@@ -605,24 +605,36 @@ pub fn handle_orientation(
         (a.to_quat().into_vec4() - b.to_quat().into_vec4()).reduce(|a, b| a.abs() + b.abs())
     }
 
-    let (tilt_ori, efficiency) = if let Body::Ship(ship) = data.body && ship.has_wheels() {
-        let height_at = |rpos| data
-            .terrain
-            .ray(
-                data.pos.0 + rpos + Vec3::unit_z() * 4.0,
-                data.pos.0 + rpos - Vec3::unit_z() * 4.0,
-            )
-            .until(Block::is_solid)
-            .cast()
-            .0;
+    let (tilt_ori, efficiency) = if let Body::Ship(ship) = data.body
+        && ship.has_wheels()
+    {
+        let height_at = |rpos| {
+            data.terrain
+                .ray(
+                    data.pos.0 + rpos + Vec3::unit_z() * 4.0,
+                    data.pos.0 + rpos - Vec3::unit_z() * 4.0,
+                )
+                .until(Block::is_solid)
+                .cast()
+                .0
+        };
 
-        // Do some cheap raycasting with the ground to determine the appropriate orientation for the vehicle
-        let x_diff = (height_at(data.ori.to_horizontal().right().to_vec() * 3.0) - height_at(data.ori.to_horizontal().right().to_vec() * -3.0)) / 10.0;
-        let y_diff = (height_at(data.ori.to_horizontal().look_dir().to_vec() * -4.5) - height_at(data.ori.to_horizontal().look_dir().to_vec() * 4.5)) / 10.0;
+        // Do some cheap raycasting with the ground to determine the appropriate
+        // orientation for the vehicle
+        let x_diff = (height_at(data.ori.to_horizontal().right().to_vec() * 3.0)
+            - height_at(data.ori.to_horizontal().right().to_vec() * -3.0))
+            / 10.0;
+        let y_diff = (height_at(data.ori.to_horizontal().look_dir().to_vec() * -4.5)
+            - height_at(data.ori.to_horizontal().look_dir().to_vec() * 4.5))
+            / 10.0;
 
         (
             Quaternion::rotation_y(x_diff.atan()) * Quaternion::rotation_x(y_diff.atan()),
-            (data.vel.0 - data.physics.ground_vel).xy().magnitude().max(3.0) * efficiency,
+            (data.vel.0 - data.physics.ground_vel)
+                .xy()
+                .magnitude()
+                .max(3.0)
+                * efficiency,
         )
     } else {
         (Quaternion::identity(), efficiency)
@@ -1140,6 +1152,9 @@ pub fn handle_manipulate_loadout(
         InventoryAction::Use(slot @ Slot::Equip(_)) => {
             let inv_manip = InventoryManip::Use(slot);
             output_events.emit_server(ServerEvent::InventoryManip(data.entity, inv_manip));
+        },
+        InventoryAction::Use(Slot::Overflow(_)) => {
+            // Items in overflow slots cannot be used until moved to a real slot
         },
         InventoryAction::ToggleSpriteLight(pos, enable) => {
             if matches!(pos.kind, Volume::Terrain) {

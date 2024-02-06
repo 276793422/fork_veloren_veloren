@@ -198,6 +198,20 @@ impl<
     const EXTENSION: &'static str = "ron";
 }
 
+/// Semantic gender aka body_type
+///
+/// Should be used for localization with extreme care.
+/// For basically everything except *maybe* humanoids, it's simply wrong to
+/// assume that this may be used as grammatical gender.
+///
+/// TODO: remove this and instead add GUI for players to choose preferred
+/// gender. Read a comment for `gender_str` in voxygen/i18n-helpers/src/lib.rs.
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+pub enum Gender {
+    Masculine,
+    Feminine,
+}
+
 impl Body {
     pub fn is_same_species_as(&self, other: &Body) -> bool {
         match self {
@@ -1346,10 +1360,29 @@ impl Body {
         Vec3::new(0.0, self.dimensions().y * 0.6, self.dimensions().z * 0.7)
     }
 
-    pub fn localize(&self) -> Content {
+    /// Should be only used with npc-tell_monster.
+    ///
+    /// If you want to use for displaying names in HUD, add new strings.
+    /// If you want to use for anything else, add new strings.
+    pub fn localize_npc(&self) -> Content {
+        fn try_localize(body: &Body) -> Option<Content> {
+            match body {
+                Body::BipedLarge(biped_large) => biped_large.localize_npc(),
+                _ => None,
+            }
+        }
+
+        try_localize(self).unwrap_or_else(|| Content::localized("body-npc-speech-generic"))
+    }
+
+    /// Read comment on `Gender` for more
+    pub fn humanoid_gender(&self) -> Option<Gender> {
         match self {
-            Self::BipedLarge(biped_large) => biped_large.localize(),
-            _ => Content::localized("body-generic"),
+            Body::Humanoid(b) => match b.body_type {
+                humanoid::BodyType::Male => Some(Gender::Masculine),
+                humanoid::BodyType::Female => Some(Gender::Feminine),
+            },
+            _ => None,
         }
     }
 }

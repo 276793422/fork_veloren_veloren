@@ -373,6 +373,7 @@ widget_ids! {
         location_marker,
         location_marker_group[],
         voxel_minimap,
+        mmap_user_poi,
     }
 }
 
@@ -896,6 +897,26 @@ impl<'a> Widget for MiniMap<'a> {
                     })
                     .parent(ui.window)
                     .set(*id, ui);
+            }
+            {
+                let dir = Vec2::new(0.0, -1.0);
+                let id = state.ids.mmap_user_poi;
+                let user_pos = format!("x:{}  y:{}  z:{}", player_pos.x as u64, player_pos.y as u64, player_pos.z as u64);
+                let cardinal_dir = Vec2::unit_x().rotated_z(orientation.x as f64) * dir.x
+                    + Vec2::unit_y().rotated_z(orientation.x as f64) * dir.y;
+                let clamped = cardinal_dir / cardinal_dir.map(|e| e.abs()).reduce_partial_max();
+                let pos = clamped * (map_size / 2.0 - 10.0);
+                Text::new(&user_pos)
+                    .x_y_position_relative_to(
+                        state.ids.map_layers[0],
+                        position::Relative::Scalar(pos.x),
+                        position::Relative::Scalar(pos.y - (self.fonts.cyri.scale(18) as f64)),
+                    )
+                    .font_size(self.fonts.cyri.scale(18))
+                    .font_id(self.fonts.cyri.conrod_id)
+                    .color(Color::Rgba(1.0, 0.0, 0.0, 1.0))
+                    .parent(ui.window)
+                    .set(id, ui);
             }
         } else {
             Image::new(self.imgs.mmap_frame_closed)

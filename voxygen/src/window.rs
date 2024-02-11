@@ -423,7 +423,7 @@ impl Window {
         let win_builder = winit::window::WindowBuilder::new()
             .with_title("Veloren")
             .with_inner_size(winit::dpi::LogicalSize::new(size[0] as f64, size[1] as f64))
-            .with_maximized(true);
+            .with_maximized(false);
 
         // Avoid cpal / winit OleInitialize conflict
         // See: https://github.com/rust-windowing/winit/pull/1524

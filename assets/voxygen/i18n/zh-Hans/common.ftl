@@ -111,3 +111,4 @@ common-material-cloth = 布料
 common-material-hide = 皮料
 common-sprite-chest = 宝箱
 common-sprite-chair = 椅子
+common-sprite-crate = 大木箱

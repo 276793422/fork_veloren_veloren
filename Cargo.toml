@@ -15,9 +15,6 @@ members = [
     "common/frontend",
     "client",
     "client/i18n",
-    "plugin/api",
-    "plugin/derive",
-    "plugin/rt",
     "rtsim",
     "server",
     "server/agent",
@@ -144,7 +141,7 @@ crossbeam-channel = { version = "0.5"}
 ordered-float = { version = "3", default-features = true }
 num = { version = "0.4" }
 num-traits = { version = "0.2" }
-vek = { version = "0.15.8", features = ["serde"] }
+vek = { version = "0.16.1", features = ["serde"] }
 itertools = { version = "0.10" }
 
 serde = { version = "1.0.118", features = ["derive"] }
@@ -156,11 +153,9 @@ image = { version = "0.24", default-features = false, features = ["png"] }
 rayon = { version = "1.5" }
 
 clap = { version = "4.2",  features = ["derive"]}
+async-trait = "0.1.42"
 
 [patch.crates-io]
-vek = { git = "https://github.com/yoanlcq/vek.git", rev = "84d5cb65841d46599a986c5477341bea4456be26" }
-# ntapi 3.7 fails to compile under windows due to the bug https://github.com/MSxDOS/ntapi/pull/12
-ntapi = { git = "https://github.com/MSxDOS/ntapi.git", rev = "9f56b149c9e25796739157c0fce3e0007a7de6eb" }
 shred = { git = "https://github.com/amethyst/shred.git", rev = "5d52c6fc390dd04c12158633e77591f6523d1f85" }
 # This is needed because of an issue with spirv & naga in wgpu 0.18, and there's an issue
 # with uint in uniforms for gl.

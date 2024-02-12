@@ -8,7 +8,7 @@ use common::uid::IdMaps;
 use common::{
     calendar::Calendar,
     comp,
-    event::{EventBus, LocalEvent, ServerEvent},
+    event::{EventBus, LocalEvent},
     link::Is,
     mounting::{Mount, Rider, VolumeRider, VolumeRiders},
     outcome::Outcome,
@@ -331,7 +331,6 @@ impl State {
         ecs.insert(SlowJobPool::new(slow_limit, 10_000, thread_pool));
 
         // TODO: only register on the server
-        ecs.insert(EventBus::<ServerEvent>::default());
         ecs.insert(comp::group::GroupManager::default());
         ecs.insert(SysMetrics::default());
         ecs.insert(PhysicsMetrics::default());
@@ -350,11 +349,7 @@ impl State {
                     id_maps: &ecs.read_resource::<IdMaps>().into(),
                     player: ecs.read_component().into(),
                 };
-                if let Err(e) = plugin_mgr
-                    .execute_event(&ecs_world, &plugin_api::event::PluginLoadEvent {
-                        game_mode,
-                    })
-                {
+                if let Err(e) = plugin_mgr.load_event(&ecs_world, game_mode) {
                     tracing::debug!(?e, "Failed to run plugin init");
                     tracing::info!("Plugins disabled, enable debug logging for more information.");
                     PluginMgr::default()
@@ -415,6 +410,15 @@ impl State {
     /// Read a component attributed to a particular entity.
     pub fn read_component_copied<C: Component + Copy>(&self, entity: EcsEntity) -> Option<C> {
         self.ecs.read_storage().get(entity).copied()
+    }
+
+    /// # Panics
+    /// Panics if `EventBus<E>` is borrowed
+    pub fn emit_event_now<E>(&self, event: E)
+    where
+        EventBus<E>: Resource,
+    {
+        self.ecs.write_resource::<EventBus<E>>().emit_now(event)
     }
 
     /// Given mutable access to the resource R, assuming the resource
@@ -685,9 +689,7 @@ impl State {
         self.dispatcher.dispatch(&self.ecs);
         drop(guard);
 
-        section_span!(guard, "maintain ecs");
-        self.ecs.maintain();
-        drop(guard);
+        self.maintain_ecs();
 
         if update_terrain {
             self.apply_terrain_changes_internal(true, block_update);
@@ -728,6 +730,11 @@ impl State {
             }
         }
         drop(guard);
+    }
+
+    pub fn maintain_ecs(&mut self) {
+        span!(_guard, "maintain ecs");
+        self.ecs.maintain();
     }
 
     /// Clean up the state after a tick.

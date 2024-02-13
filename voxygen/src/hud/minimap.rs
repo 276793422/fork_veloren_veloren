@@ -374,6 +374,7 @@ widget_ids! {
         location_marker_group[],
         voxel_minimap,
         mmap_user_poi,
+        mmap_world_time,
     }
 }
 
@@ -899,24 +900,54 @@ impl<'a> Widget for MiniMap<'a> {
                     .set(*id, ui);
             }
             {
+                
                 let dir = Vec2::new(0.0, -1.0);
-                let id = state.ids.mmap_user_poi;
-                let user_pos = format!("x:{}  y:{}  z:{}", player_pos.x as u64, player_pos.y as u64, player_pos.z as u64);
                 let cardinal_dir = Vec2::unit_x().rotated_z(orientation.x as f64) * dir.x
                     + Vec2::unit_y().rotated_z(orientation.x as f64) * dir.y;
                 let clamped = cardinal_dir / cardinal_dir.map(|e| e.abs()).reduce_partial_max();
                 let pos = clamped * (map_size / 2.0 - 10.0);
-                Text::new(&user_pos)
-                    .x_y_position_relative_to(
-                        state.ids.map_layers[0],
-                        position::Relative::Scalar(pos.x),
-                        position::Relative::Scalar(pos.y - (self.fonts.cyri.scale(18) as f64)),
-                    )
-                    .font_size(self.fonts.cyri.scale(18))
-                    .font_id(self.fonts.cyri.conrod_id)
-                    .color(Color::Rgba(1.0, 0.0, 0.0, 1.0))
-                    .parent(ui.window)
-                    .set(id, ui);
+                //  current user pos
+                let mut low_count = 1;
+                {
+                    let id = state.ids.mmap_user_poi;
+                    let user_pos = format!("x:{}  y:{}  z:{}", player_pos.x as u64, player_pos.y as u64, player_pos.z as u64);
+                    Text::new(&user_pos)
+                        .x_y_position_relative_to(
+                            state.ids.map_layers[0],
+                            position::Relative::Scalar(pos.x),
+                            position::Relative::Scalar(pos.y - ((self.fonts.cyri.scale(18) * low_count) as f64)),
+                        )
+                        .font_size(self.fonts.cyri.scale(18))
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .color(Color::Rgba(1.0, 0.0, 0.0, 1.0))
+                        .parent(ui.window)
+                        .set(id, ui);
+                    low_count += 1;
+                }
+                //  current world time
+                {
+                    let id = state.ids.mmap_world_time;
+                    let time_in_seconds = self.client.state().get_time_of_day();
+                    let current_time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(
+                            // Wraps around back to 0s if it exceeds 24 hours (24 hours = 86400s)
+                            (time_in_seconds as u64 % 86400) as u32,
+                            0,
+                        )
+                        .expect("time always valid");
+                    let current_time = format!("Time: {}", current_time.format("%H:%M"));
+                    Text::new(&current_time)
+                        .x_y_position_relative_to(
+                            state.ids.map_layers[0],
+                            position::Relative::Scalar(pos.x),
+                            position::Relative::Scalar(pos.y - ((self.fonts.cyri.scale(18) * low_count) as f64)),
+                        )
+                        .font_size(self.fonts.cyri.scale(18))
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .color(Color::Rgba(1.0, 0.0, 0.0, 1.0))
+                        .parent(ui.window)
+                        .set(id, ui);
+                    //low_count += 1;
+                }
             }
         } else {
             Image::new(self.imgs.mmap_frame_closed)

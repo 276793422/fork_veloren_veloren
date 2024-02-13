@@ -88,7 +88,6 @@ rand_chacha = { workspace = true }
 #test
 tracing-subscriber = { version = "0.3.7", default-features = false, features = ["fmt", "time", "ansi", "smallvec", "env-filter"] }
 ron = {version = "0.8", default-features = false}
-curl = "0.4.44"
 petgraph = "0.6.0"
 
 [[bench]]

@@ -1771,7 +1771,6 @@ mod tests {
 
     use std::{fs, path::Path};
     use ron;
-    use curl::easy::Easy;
     
     fn traverse_directory(dir_path: &str) -> usize {
         let entries = fs::read_dir(dir_path).unwrap();
@@ -1803,29 +1802,6 @@ mod tests {
         n_count
     }
 
-    fn post_request(url: &str, body: &str) -> Result<String, String> {
-        let mut easy = Easy::new();
-
-        easy.url(url).unwrap();
-        easy.post(true).unwrap();
-        easy.post_fields_copy(body.as_bytes()).unwrap();
-
-        let mut buffer = Vec::new();
-        {
-            let mut transfer = easy.transfer();
-            transfer.write_function(|data| {
-                buffer.extend_from_slice(data);
-                Ok(data.len())
-            }).unwrap();
-            transfer.perform().unwrap();
-        }
-    
-        let response_code = &easy.response_code().unwrap_or(500);
-        
-        println!("[DEBUG] POST {}: ({}) {:?}", url, response_code, String::from_utf8(buffer.clone()));
-    
-        Ok(String::from_utf8(buffer).expect("返回出错"))
-    }
 
     #[test]
     fn test_assets_items_iterator() {
@@ -1833,11 +1809,6 @@ mod tests {
         let n_count = traverse_directory(&dir_path);
 
         println!("Count : {}", n_count);
-
-        let url = "https://luckycola.com.cn/tools/fanyi";
-        let body = "ColaKey=YycB7EitYKHtHw1705157916874E5Lh0f0KVZ&text=start&fromlang=EN&tolang=ZH";
-        let response = post_request(url, body);
-        println!("{}", response.expect("post_request value"));
         // let response = post("Response: {}", response);
     }
 

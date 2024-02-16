@@ -167,7 +167,7 @@ impl ServerEvent for InventoryManipEvent {
                         // of the world from the first pickup
                         // attempt was processed.
                         debug!("Failed to get entity for item Uid: {}", pickup_uid);
-                        return;
+                        continue;
                     };
                     let entity_cylinder = get_cylinder(entity);
 
@@ -177,7 +177,7 @@ impl ServerEvent for InventoryManipEvent {
                             ?entity_cylinder,
                             "Failed to pick up item as not within range, Uid: {}", pickup_uid
                         );
-                        return;
+                        continue;
                     }
 
                     // If there's a loot owner for the item being picked up, then
@@ -214,7 +214,7 @@ impl ServerEvent for InventoryManipEvent {
                             });
 
                     if !ownership_check_passed {
-                        return;
+                        continue;
                     }
 
                     // First, we remove the item, assuming picking it up will succeed (we do this to
@@ -231,7 +231,7 @@ impl ServerEvent for InventoryManipEvent {
                             "Failed to delete item component for entity, Uid: {}",
                             pickup_uid
                         );
-                        return;
+                        continue;
                     };
 
                     // NOTE: We dup the item for message purposes.
@@ -269,7 +269,6 @@ impl ServerEvent for InventoryManipEvent {
                                     &data.uids,
                                     &data.groups,
                                     &data.alignments,
-                                    &data.stats,
                                     &data.entities,
                                     &data.ability_map,
                                     &data.msm,
@@ -322,7 +321,6 @@ impl ServerEvent for InventoryManipEvent {
                                                     &data.uids,
                                                     &data.groups,
                                                     &data.alignments,
-                                                    &data.stats,
                                                     &data.entities,
                                                     &data.ability_map,
                                                     &data.msm,
@@ -351,6 +349,9 @@ impl ServerEvent for InventoryManipEvent {
                                 Some(SpriteKind::HaniwaKeyhole) => Some(SpriteKind::HaniwaKeyDoor),
                                 Some(SpriteKind::GlassKeyhole) => Some(SpriteKind::GlassBarrier),
                                 Some(SpriteKind::KeyholeBars) => Some(SpriteKind::DoorBars),
+                                Some(SpriteKind::TerracottaKeyhole) => {
+                                    Some(SpriteKind::TerracottaKeyDoor)
+                                },
                                 _ => None,
                             } {
                                 let dirs = [
@@ -702,7 +703,7 @@ impl ServerEvent for InventoryManipEvent {
                         if let Some(source_item) = inventory.get(source_inv_slot_id) {
                             if let Some(target_item) = inventory.get(target_inv_slot_id) {
                                 if source_item != target_item {
-                                    return;
+                                    continue;
                                 }
                             }
                         }
@@ -1081,7 +1082,6 @@ fn announce_loot_to_group(
     uids: &ReadStorage<Uid>,
     groups: &ReadStorage<comp::Group>,
     alignments: &ReadStorage<comp::Alignment>,
-    stats: &ReadStorage<comp::Stats>,
     entities: &Entities,
     ability_map: &AbilityMap,
     msm: &MaterialStatManifest,
@@ -1090,14 +1090,11 @@ fn announce_loot_to_group(
         members(*group_id, groups, entities, alignments, uids)
             .filter(|(member_e, _)| member_e != &entity)
             .for_each(|(e, _)| {
-                clients.get(e).and_then(|c| {
-                    stats.get(entity).map(|stats| {
-                        c.send_fallible(ServerGeneral::GroupInventoryUpdate(
-                            item.duplicate(ability_map, msm),
-                            stats.name.to_string(),
-                            *uid,
-                        ))
-                    })
+                clients.get(e).map(|c| {
+                    c.send_fallible(ServerGeneral::GroupInventoryUpdate(
+                        item.duplicate(ability_map, msm),
+                        *uid,
+                    ));
                 });
             });
     }

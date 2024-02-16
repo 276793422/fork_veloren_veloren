@@ -73,6 +73,9 @@ common-items-npc_weapons-bow-bipedlarge-velorite = Giant Velorite Bow
 common-items-npc_weapons-bow-saurok_bow = Saurok bow
     .desc = Placeholder
 
+common-items-npc_weapons-bow-terracotta_besieger_bow = Terracotta Besieger Bow
+    .desc = Placeholder
+
 common-items-npc_weapons-axe-gigas_frost_axe = Frost Gigas Axe
     .desc = Placeholder
 
@@ -112,13 +115,10 @@ common-items-npc_weapons-sword-saurok_sword = Saurok Sword
 common-items-npc_weapons-sword-haniwa_general_sword = Haniwa General Sword
     .desc = Placeholder
 
+common-items-npc_weapons-sword-terracotta_pursuer_sword = Terracotta Pursuer Sword
+    .desc = Placeholder
+
 common-items-npc_weapons-unique-akhlut = Quad Med Basic
-    .desc = testing123
-
-common-items-npc_weapons-unique-asp = Asp
-    .desc = testing123
-
-common-items-npc_weapons-unique-basilisk = Basilisk
     .desc = testing123
 
 common-items-npc_weapons-unique-beast_claws = Beast Claws
@@ -174,6 +174,27 @@ common-items-npc_weapons-unique-fiery_tornado = FieryTornado
 
 common-items-npc_weapons-unique-flamekeeper_staff = Flamekeeper Staff
     .desc = Flamekeeper Staff
+
+common-items-npc_weapons-unique-cursekeeper_sceptre = Cursekeeper Sceptre
+    .desc = Cursekeeper Sceptre
+
+common-items-npc_weapons-unique-cursekeeper_sceptre_fake = Cursekeeper Sceptre
+    .desc = Cursekeeper Sceptre
+
+common-items-npc_weapons-unique-jiangshi = Jiangshi Magic
+    .desc = Jiangshi Magic
+
+common-items-npc_weapons-unique-mogwai = Mogwai Magic
+    .desc = Mogwai Magic
+
+common-items-npc_weapons-unique-shamanic_spirit = Shamanic Spirit
+    .desc = Shamanic Spirit
+
+common-items-npc_weapons-unique-terracotta_demolisher_fist = Terracotta Demolisher Fist
+    .desc = Terracotta Demolisher Fist
+
+common-items-npc_weapons-unique-terracotta_statue = Terracotta Statue
+    .desc = Terracotta Statue
 
 common-items-npc_weapons-unique-flamethrower = Flamethrower
     .desc = Throwing Flames
@@ -331,6 +352,9 @@ common-items-npc_weapons-unique-arthropods-hornbeetle = Horn Beetle
 common-items-npc_weapons-unique-arthropods-leafbeetle = Leaf Beetle
     .desc = testing123
 
+common-items-npc_weapons-unique-arthropods-moltencrawler = Molten Crawler
+    .desc = testing123
+
 common-items-npc_weapons-unique-arthropods-mosscrawler = Moss Crawler
     .desc = testing123
 
@@ -338,6 +362,63 @@ common-items-npc_weapons-unique-arthropods-tarantula = Tarantula
     .desc = testing123
 
 common-items-npc_weapons-unique-arthropods-weevil = Weevil
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-asp = Asp
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-basilisk = Basilisk
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-deadwood = Deadwood
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-hakulaq = Hakulaq
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-icedrake = Ice Drake
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-lavadrake = Lava Drake
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-maneater = Maneater
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_low-tortoise = Tortoise
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-alpaca = Alpaca
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-antelope = Antelope
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-donkey = Donkey
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-grolgar = Grolgar
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-horse = Horse
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-moose = Moose
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_medium-mouflon = Mouflon
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_small-boar = Boar
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_small-hyena = Hyena
+    .desc = testing123
+
+common-items-npc_weapons-unique-quadruped_small-rodent = Rodent
+    .desc = testing123
+
+common-items-npc_weapons-unique-theropod-yale = Yale
     .desc = testing123
 
 common-items-npc_weapons-hammer-bipedlarge-cultist = Giant Cultist Warhammer
@@ -362,4 +443,7 @@ common-items-npc_weapons-hammer-wendigo_hammer = Wendigo Hammer
     .desc = Placeholder
 
 common-items-npc_weapons-hammer-yeti_hammer = Yeti Hammer
+    .desc = Placeholder
+
+common-items-npc_weapons-hammer-terracotta_punisher_club = Terracotta Punisher Club
     .desc = Placeholder

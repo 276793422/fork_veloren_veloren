@@ -284,6 +284,7 @@ impl Body {
                 | object::Body::FireworkWhite
                 | object::Body::FireworkYellow
                 | object::Body::MultiArrow
+                | object::Body::BoltBesieger
                 | object::Body::Dart => {
                     let dim = self.dimensions().map(|a| a * 0.5 * scale);
                     const CD: f32 = 0.02;
@@ -303,7 +304,8 @@ impl Body {
                 | object::Body::Pumpkin2
                 | object::Body::Pumpkin3
                 | object::Body::Pumpkin4
-                | object::Body::Pumpkin5 => {
+                | object::Body::Pumpkin5
+                | object::Body::Pebble => {
                     let dim = self.dimensions().map(|a| a * 0.5 * scale);
                     const CD: f32 = 0.5;
                     CD * PI * dim.x * dim.z

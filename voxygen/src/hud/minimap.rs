@@ -934,7 +934,7 @@ impl<'a> Widget for MiniMap<'a> {
                             0,
                         )
                         .expect("time always valid");
-                    let current_time = format!("Time: {}", current_time.format("%H:%M"));
+                    let current_time = format!("Time: {}", current_time.format("%H:%M:%S"));
                     Text::new(&current_time)
                         .x_y_position_relative_to(
                             state.ids.map_layers[0],
@@ -948,6 +948,26 @@ impl<'a> Widget for MiniMap<'a> {
                         .set(id, ui);
                     //low_count += 1;
                 }
+                /*{
+                    /*
+                    let player_list = self.client.player_list();
+                    for (k , v) in player_list.iter() {
+                        tracing::info!("\t\t info : {:?} => {:?} ", k, v);
+                    }
+                    
+                    tracing::info!("players : {:?}", self.client.players().count());
+                    for v in self.client.players() {
+                        tracing::info!("\t\t players : {}", v);
+                    }
+
+                    let ecs_world =self.client.state().ecs();
+                    tracing::info!("comp::Pos count : {:?}", ecs_world.read_storage::<comp::Pos>().count());
+                    tracing::info!("comp::ItemDrops count : {:?}", ecs_world.read_storage::<comp::ItemDrops>().count());
+                    tracing::info!("comp::Last<comp::Pos> count : {:?}", ecs_world.read_storage::<comp::Last<comp::Pos>>().count());
+                    tracing::info!("comp::Agent count : {:?}", ecs_world.read_storage::<comp::Agent>().count());
+                    tracing::info!("comp::Object count : {:?}", ecs_world.read_storage::<comp::Object>().count());
+                    */
+                }*/
             }
         } else {
             Image::new(self.imgs.mmap_frame_closed)

@@ -55,10 +55,7 @@ fn main() -> io::Result<()> {
     // noninteractive implies basic
     let basic = basic || noninteractive;
 
-    let sigusr1_signal = Arc::new(AtomicBool::new(false));
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGUSR1, Arc::clone(&sigusr1_signal));
+    let shutdown_signal = Arc::new(AtomicBool::new(false));
 
     let (_guards, _guards2) = if basic {
         (Vec::new(), common_frontend::init_stdout(None))
@@ -68,6 +65,21 @@ fn main() -> io::Result<()> {
 
     // Load settings
     let settings = settings::Settings::load();
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        for signal in &settings.shutdown_signals {
+            let _ = signal_hook::flag::register(signal.to_signal(), Arc::clone(&shutdown_signal));
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    if !settings.shutdown_signals.is_empty() {
+        tracing::warn!(
+            "Server configuration contains shutdown signals, but your platform does not support \
+             them"
+        );
+    }
 
     // Determine folder to save server data in
     let server_data_dir = {
@@ -234,7 +246,7 @@ fn main() -> io::Result<()> {
         "Server is ready to accept connections."
     );
 
-    let mut shutdown_coordinator = ShutdownCoordinator::new(Arc::clone(&sigusr1_signal));
+    let mut shutdown_coordinator = ShutdownCoordinator::new(Arc::clone(&shutdown_signal));
 
     // Set up an fps clock
     let mut clock = Clock::new(Duration::from_secs_f64(1.0 / TPS as f64));

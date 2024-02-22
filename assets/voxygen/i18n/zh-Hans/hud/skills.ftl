@@ -24,7 +24,7 @@ hud-skill-unlck_sceptre_title = 解锁生命权杖专精
 hud-skill-unlck_sceptre = 解锁生命权杖技能树{ $SP }
 
 hud-skill-dodge_title = 闪避
-hud-skill-dodge = 翻滚可以躲避敌人的攻击{ $SP }
+hud-skill-dodge = 翻滚可以躲避敌人的攻击
 
 hud-skill-roll_energy_title = 体术(翻滚)
 hud-skill-roll_energy = 减少每次翻滚需要消耗的耐力{ $boost }%{ $SP }

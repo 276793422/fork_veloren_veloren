@@ -12,7 +12,7 @@ use crate::{
 use client::{self, Client};
 use common::{
     comp,
-    comp::group::Role,
+    comp::{group::Role},
     grid::Grid,
     slowjob::SlowJobPool,
     terrain::{
@@ -913,7 +913,7 @@ impl<'a> Widget for MiniMap<'a> {
                 let mut low_count = 1;
                 {
                     let id = state.ids.mmap_user_poi;
-                    let user_pos = format!("x:{}  y:{}  z:{}", player_pos.x as u64, player_pos.y as u64, player_pos.z as u64);
+                    let user_pos = format!("x:{:.0}  y:{:.0}  z:{:.0}", player_pos.x, player_pos.y, player_pos.z);
                     Text::new(&user_pos)
                         .x_y_position_relative_to(
                             state.ids.map_layers[0],
@@ -951,7 +951,7 @@ impl<'a> Widget for MiniMap<'a> {
                         .set(id, ui);
                     //low_count += 1;
                 }
-                /*{
+                {
                     /*
                     let player_list = self.client.player_list();
                     for (k , v) in player_list.iter() {
@@ -970,7 +970,55 @@ impl<'a> Widget for MiniMap<'a> {
                     tracing::info!("comp::Agent count : {:?}", ecs_world.read_storage::<comp::Agent>().count());
                     tracing::info!("comp::Object count : {:?}", ecs_world.read_storage::<comp::Object>().count());
                     */
-                }*/
+                }
+                {
+                    /*
+                    let client_items_object = self
+                        .client
+                        .state()
+                        .ecs()
+                        .read_storage::<comp::Inventory>();
+                    
+                    let client_items = client_items_object.get(self.client.entity());
+
+                    match client_items {
+                        None => {},
+                        Some(inventory_all) => {
+
+                            let items_chain = inventory_all
+                                .overflow_items()
+                                .enumerate()
+                                .map(|(i, item)| (Slot::Overflow(i), Some(item)));
+                
+                            tracing::info!("items_chain ----- {:?} ", items_chain.count());
+                            
+                            let items_chain = inventory_all
+                                .overflow_items()
+                                .enumerate()
+                                .map(|(i, item)| (Slot::Overflow(i), Some(item)));
+                
+                            let items = inventory_all
+                                .slots_with_id()
+                                .map(|(slot, item)| (Slot::Inventory(slot), item.as_ref()))
+                                .chain(items_chain)
+                                .collect::<Vec<_>>();
+                            
+                            tracing::info!("items       ----- {:?} ", items.len());
+
+                            for (_, item) in items.into_iter() {
+                                match item {
+                                    None => {
+                                        
+                                    },
+                                    Some(it) => {
+                                        tracing::info!("\t {:?} => {:?}", it.amount(), it.persistence_item_id());
+                                    },
+                                }
+                            }
+                        },
+                    }
+                    */
+                }
             }
         } else {
             Image::new(self.imgs.mmap_frame_closed)

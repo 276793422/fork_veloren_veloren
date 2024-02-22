@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance changes; Smoother entity progression consisting of larger variety in (effective) health pools, dps, entity flee_health alterations, and minor weight distribution changes for entity spawns.
 - Made power of weapon tiers scale non-linearly.
 - Sword Changes; Pommel Strike has been nerfed -> increased energy cost, increased _durations, and decreased poise damage. Heavy Sweep has been nerfed -> decreased poise damage and stun vulnerability damage. Pillar Thrust has been altered -> decreased maximum base damage with an increase in stun vulnerability damage.
+- Weapons block are based on poise
+- Wooden Shield recipe
 
 ### Removed
 - Medium and large potions from all loot tables
@@ -112,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed Twiggy Shoulders to match the Twig Armor set
 - No longer stack buffs of the same kind with equal attributes, this could lead to a DoS if ie. an entity stayed long enough in lava.
 - Nerfed Earthsplitter
+- Burning buff is now contagious
 
 ## [0.15.0] - 2023-07-01
 

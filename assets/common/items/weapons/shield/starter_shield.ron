@@ -1,22 +1,20 @@
 ItemDef(
-    legacy_name: "Cultist Staff",
-    legacy_description: "The fire gives off no heat.",
+    legacy_name: "Wooden Shield",
+    legacy_description: "May not withstand fire",
     kind: Tool((
-        kind: Staff,
-        hands: Two,
+        kind: Shield,
+        hands: One,
         stats: (
             equip_time_secs: 0.3,
-            power: 1.45,
+            power: 0.5,
             effect_power: 1.0,
-            speed: 0.65,
+            speed: 1.0,
             range: 1.0,
             energy_efficiency: 1.0,
             buff_strength: 1.0,
         ),
     )),
-    quality: Epic,
-    tags: [
-        Cultist,
-    ],
+    quality: Common,
+    tags: [],
     ability_spec: None,
 )

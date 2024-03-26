@@ -9,7 +9,7 @@ use crate::{
         server_description::ServerDescription, Ban, BanAction, BanInfo, EditableSetting,
         SettingError, WhitelistInfo, WhitelistRecord,
     },
-    sys::terrain::NpcData,
+    sys::terrain::SpawnEntityData,
     weather::WeatherJob,
     wiring,
     wiring::OutputFormula,
@@ -28,6 +28,7 @@ use common::{
     },
     comp::{
         self,
+        aura::{AuraKindVariant, AuraTarget},
         buff::{Buff, BuffData, BuffKind, BuffSource, MiscBuffData},
         inventory::{
             item::{all_items_expect, tool::AbilityMap, MaterialStatManifest, Quality},
@@ -35,27 +36,29 @@ use common::{
         },
         invite::InviteKind,
         misc::PortalData,
-        AdminRole, ChatType, Content, Inventory, Item, LightEmitter, WaypointArea,
+        AdminRole, Aura, AuraKind, BuffCategory, ChatType, Content, Inventory, Item, LightEmitter,
+        WaypointArea,
     },
     depot,
     effect::Effect,
     event::{
-        ClientDisconnectEvent, CreateWaypointEvent, EventBus, ExplosionEvent, GroupManipEvent,
-        InitiateInviteEvent, TamePetEvent,
+        ClientDisconnectEvent, CreateNpcEvent, CreateSpecialEntityEvent, EventBus, ExplosionEvent,
+        GroupManipEvent, InitiateInviteEvent, TamePetEvent,
     },
-    generation::{EntityConfig, EntityInfo},
+    generation::{EntityConfig, EntityInfo, SpecialEntity},
     link::Is,
     mounting::{Rider, Volume, VolumeRider},
     npc::{self, get_npc_name},
     outcome::Outcome,
     parse_cmd_args,
-    resources::{BattleMode, PlayerPhysicsSettings, Secs, Time, TimeOfDay, TimeScale},
+    resources::{BattleMode, PlayerPhysicsSettings, ProgramTime, Secs, Time, TimeOfDay, TimeScale},
     rtsim::{Actor, Role},
     terrain::{Block, BlockKind, CoordinateConversions, SpriteKind, TerrainChunkSize},
     tether::Tethered,
     uid::Uid,
     vol::ReadVol,
-    weather, Damage, DamageKind, DamageSource, Explosion, LoadoutBuilder, RadiusEffect,
+    weather, Damage, DamageKind, DamageSource, Explosion, GroupTarget, LoadoutBuilder,
+    RadiusEffect,
 };
 use common_net::{
     msg::{DisconnectReason, Notification, PlayerListUpdate, ServerGeneral},
@@ -67,7 +70,7 @@ use hashbrown::{HashMap, HashSet};
 use humantime::Duration as HumanDuration;
 use rand::{thread_rng, Rng};
 use specs::{storage::StorageEntry, Builder, Entity as EcsEntity, Join, LendJoin, WorldExt};
-use std::{fmt::Write, ops::DerefMut, str::FromStr, sync::Arc};
+use std::{fmt::Write, ops::DerefMut, str::FromStr, sync::Arc, time::Duration};
 use vek::*;
 use wiring::{Circuit, Wire, WireNode, WiringAction, WiringActionEffect, WiringElement};
 use world::util::{Sampler, LOCALITY};
@@ -134,6 +137,7 @@ fn do_command(
         ServerChatCommand::AreaAdd => handle_area_add,
         ServerChatCommand::AreaList => handle_area_list,
         ServerChatCommand::AreaRemove => handle_area_remove,
+        ServerChatCommand::Aura => handle_aura,
         ServerChatCommand::Ban => handle_ban,
         ServerChatCommand::BattleMode => handle_battlemode,
         ServerChatCommand::BattleModeForce => handle_battlemode_force,
@@ -494,7 +498,7 @@ fn handle_drop_all(
             )),
             comp::Ori::default(),
             comp::Vel(vel),
-            item,
+            comp::PickupItem::new(item, ProgramTime(server.state.get_program_time())),
             None,
         );
     }
@@ -666,11 +670,8 @@ fn handle_into_npc(
         TransformEntityError::EntityDead => {
             Content::localized_with_args("command-entity-dead", [("entity", "target")])
         },
-        TransformEntityError::UnexpectedNpcWaypoint => {
-            Content::localized("command-unimplemented-waypoint-spawn")
-        },
-        TransformEntityError::UnexpectedNpcTeleporter => {
-            Content::localized("command-unimplemented-teleporter-spawn")
+        TransformEntityError::UnexpectedSpecialEntity => {
+            Content::localized("command-unimplemented-spawn-special")
         },
         TransformEntityError::LoadingCharacter => {
             Content::localized("command-transform-invalid-presence")
@@ -726,61 +727,23 @@ fn handle_make_npc(
             None,
         );
 
-        match NpcData::from_entity_info(entity_info) {
-            NpcData::Waypoint(_) => {
-                return Err(Content::localized("command-unimplemented-waypoint-spawn"));
+        match SpawnEntityData::from_entity_info(entity_info) {
+            SpawnEntityData::Special(_, _) => {
+                return Err(Content::localized("command-unimplemented-spawn-special"));
             },
-            NpcData::Teleporter(_, _) => {
-                return Err(Content::localized("command-unimplemented-teleporter-spawn"));
-            },
-            NpcData::Data {
-                inventory,
-                pos,
-                stats,
-                skill_set,
-                poise,
-                health,
-                body,
-                agent,
-                alignment,
-                scale,
-                loot,
-            } => {
-                let mut entity_builder = server
+            SpawnEntityData::Npc(data) => {
+                let (npc_builder, _pos) = data.to_npc_builder();
+
+                server
                     .state
-                    .create_npc(
-                        pos,
-                        comp::Ori::default(),
-                        stats,
-                        skill_set,
-                        health,
-                        poise,
-                        inventory,
-                        body,
-                    )
-                    .with(alignment)
-                    .with(scale)
-                    .with(comp::Vel(Vec3::new(0.0, 0.0, 0.0)));
-
-                if let Some(agent) = agent {
-                    entity_builder = entity_builder.with(agent);
-                }
-
-                if let Some(drop_items) = loot.to_items() {
-                    entity_builder = entity_builder.with(comp::ItemDrops(drop_items));
-                }
-
-                // Some would say it's a hack, some would say it's incomplete
-                // simulation. But this is what we do to avoid PvP between npc.
-                let npc_group = match alignment {
-                    Alignment::Enemy => Some(comp::group::ENEMY),
-                    Alignment::Npc | Alignment::Tame => Some(comp::group::NPC),
-                    Alignment::Wild | Alignment::Passive | Alignment::Owned(_) => None,
-                };
-                if let Some(group) = npc_group {
-                    entity_builder = entity_builder.with(group);
-                }
-                entity_builder.build();
+                    .ecs()
+                    .read_resource::<EventBus<CreateNpcEvent>>()
+                    .emit_now(CreateNpcEvent {
+                        pos: comp::Pos(pos),
+                        ori: comp::Ori::default(),
+                        npc: npc_builder,
+                        rider: None,
+                    });
             },
         };
     }
@@ -1724,7 +1687,7 @@ fn handle_spawn(
                         comp::Ori::default(),
                         comp::Stats::new(get_npc_name(id, npc::BodyType::from_body(body)), body),
                         comp::SkillSet::default(),
-                        Some(comp::Health::new(body, 0)),
+                        Some(comp::Health::new(body)),
                         comp::Poise::new(body),
                         inventory,
                         body,
@@ -1768,13 +1731,7 @@ fn handle_spawn(
                         owner_entity: target,
                         pet_entity: new_entity,
                     });
-                } else if let Some(group) = match alignment {
-                    Alignment::Wild => None,
-                    Alignment::Passive => None,
-                    Alignment::Enemy => Some(comp::group::ENEMY),
-                    Alignment::Npc | Alignment::Tame => Some(comp::group::NPC),
-                    comp::Alignment::Owned(_) => unreachable!(),
-                } {
+                } else if let Some(group) = alignment.group() {
                     insert_or_replace_component(server, new_entity, group, "new entity")?;
                 }
 
@@ -1819,7 +1776,7 @@ fn handle_spawn_training_dummy(
 
     let stats = comp::Stats::new("Training Dummy".to_string(), body);
     let skill_set = comp::SkillSet::default();
-    let health = comp::Health::new(body, 0);
+    let health = comp::Health::new(body);
     let poise = comp::Poise::new(body);
 
     server
@@ -2037,8 +1994,11 @@ fn handle_spawn_campfire(
     server
         .state
         .ecs()
-        .read_resource::<EventBus<CreateWaypointEvent>>()
-        .emit_now(CreateWaypointEvent(pos.0));
+        .read_resource::<EventBus<CreateSpecialEntityEvent>>()
+        .emit_now(CreateSpecialEntityEvent {
+            pos: pos.0,
+            entity: SpecialEntity::Waypoint,
+        });
 
     server.notify_client(
         client,
@@ -4008,6 +3968,113 @@ fn handle_ban(
     }
 }
 
+fn handle_aura(
+    server: &mut Server,
+    client: EcsEntity,
+    target: EcsEntity,
+    args: Vec<String>,
+    action: &ServerChatCommand,
+) -> CmdResult<()> {
+    let target_uid = uid(server, target, "target")?;
+
+    let (Some(aura_radius), aura_duration, new_entity, aura_target, Some(aura_kind_variant), spec) =
+        parse_cmd_args!(args, f32, f32, bool, GroupTarget, AuraKindVariant, ..Vec<String>)
+    else {
+        return Err(Content::Plain(action.help_string()));
+    };
+    let new_entity = new_entity.unwrap_or(false);
+    let aura_kind = match aura_kind_variant {
+        AuraKindVariant::Buff => {
+            let (Some(buff), strength, duration, misc_data_spec) =
+                parse_cmd_args!(spec, String, f32, f64, String)
+            else {
+                return Err(Content::localized("command-aura-invalid-buff-parameters"));
+            };
+            let buffkind = parse_buffkind(&buff).ok_or_else(|| {
+                Content::localized_with_args("command-buff-unknown", [("buff", buff.clone())])
+            })?;
+            let buffdata = build_buff(
+                buffkind,
+                strength.unwrap_or(1.0),
+                duration.unwrap_or(10.0),
+                (!buffkind.is_simple())
+                    .then(|| {
+                        misc_data_spec.ok_or_else(|| {
+                            Content::localized_with_args("command-buff-data", [(
+                                "buff",
+                                buff.clone(),
+                            )])
+                        })
+                    })
+                    .transpose()?,
+            )?;
+
+            AuraKind::Buff {
+                kind: buffkind,
+                data: buffdata,
+                category: BuffCategory::Natural,
+                source: if new_entity {
+                    BuffSource::World
+                } else {
+                    BuffSource::Character { by: target_uid }
+                },
+            }
+        },
+        AuraKindVariant::FriendlyFire => AuraKind::FriendlyFire,
+        AuraKindVariant::ForcePvP => AuraKind::ForcePvP,
+    };
+    let aura_target = server
+        .state
+        .read_component_copied::<Uid>(target)
+        .map(|uid| match aura_target {
+            Some(GroupTarget::InGroup) => AuraTarget::GroupOf(uid),
+            Some(GroupTarget::OutOfGroup) => AuraTarget::NotGroupOf(uid),
+            None => AuraTarget::All,
+        })
+        .unwrap_or(AuraTarget::All);
+
+    let time = Time(server.state.get_time());
+    let aura = Aura::new(
+        aura_kind,
+        aura_radius,
+        aura_duration.map(|duration| Secs(duration as f64)),
+        aura_target,
+        time,
+    );
+
+    if new_entity {
+        let pos = position(server, target, "target")?;
+        server
+            .state
+            .create_empty(pos)
+            .with(comp::Auras::new(vec![aura]))
+            .maybe_with(aura_duration.map(|duration| comp::Object::DeleteAfter {
+                spawned_at: time,
+                timeout: Duration::from_secs_f32(duration),
+            }))
+            .build();
+    } else {
+        let mut auras = server.state.ecs().write_storage::<comp::Auras>();
+        if let Some(mut auras) = auras.get_mut(target) {
+            auras.insert(aura);
+        }
+    }
+
+    server.notify_client(
+        client,
+        ServerGeneral::server_msg(
+            ChatType::CommandInfo,
+            Content::localized(if new_entity {
+                "command-aura-spawn-new-entity"
+            } else {
+                "command-aura-spawn"
+            }),
+        ),
+    );
+
+    Ok(())
+}
+
 fn handle_battlemode(
     server: &mut Server,
     client: EcsEntity,
@@ -4263,81 +4330,89 @@ fn handle_buff(
         let buffkind = parse_buffkind(&buff).ok_or_else(|| {
             Content::localized_with_args("command-buff-unknown", [("buff", buff.clone())])
         })?;
+        let buffdata = build_buff(
+            buffkind,
+            strength,
+            duration.unwrap_or(10.0),
+            (!buffkind.is_simple())
+                .then(|| {
+                    misc_data_spec.ok_or_else(|| {
+                        Content::localized_with_args("command-buff-data", [("buff", buff.clone())])
+                    })
+                })
+                .transpose()?,
+        )?;
 
-        if buffkind.is_simple() {
-            let duration = duration.unwrap_or(10.0);
-            let buffdata = BuffData::new(strength, Some(Secs(duration)));
-            cast_buff(buffkind, buffdata, server, target);
-            Ok(())
-        } else {
-            // default duration is longer for complex buffs
-            let duration = duration.unwrap_or(20.0);
-            let spec = misc_data_spec.ok_or_else(|| {
-                Content::localized_with_args("command-buff-data", [("buff", buff.clone())])
-            })?;
-            cast_buff_complex(buffkind, server, target, spec, strength, duration)
-        }
+        cast_buff(buffkind, buffdata, server, target);
+        Ok(())
     }
 }
 
-fn cast_buff_complex(
-    buffkind: BuffKind,
-    server: &mut Server,
-    target: EcsEntity,
-    spec: String,
+fn build_buff(
+    buff_kind: BuffKind,
     strength: f32,
     duration: f64,
-) -> CmdResult<()> {
-    // explicit match to remember that this function exists
-    let misc_data = match buffkind {
-        BuffKind::Polymorphed => {
-            let Ok(npc::NpcBody(_id, mut body)) = spec.parse() else {
-                return Err(Content::localized_with_args("command-buff-body-unknown", [
-                    ("spec", spec.clone()),
-                ]));
-            };
-            MiscBuffData::Body(body())
-        },
-        BuffKind::Regeneration
-        | BuffKind::Saturation
-        | BuffKind::Potion
-        | BuffKind::Agility
-        | BuffKind::CampfireHeal
-        | BuffKind::Frenzied
-        | BuffKind::EnergyRegen
-        | BuffKind::IncreaseMaxEnergy
-        | BuffKind::IncreaseMaxHealth
-        | BuffKind::Invulnerability
-        | BuffKind::ProtectingWard
-        | BuffKind::Hastened
-        | BuffKind::Fortitude
-        | BuffKind::Reckless
-        | BuffKind::Flame
-        | BuffKind::Frigid
-        | BuffKind::Lifesteal
-        | BuffKind::ImminentCritical
-        | BuffKind::Fury
-        | BuffKind::Sunderer
-        | BuffKind::Defiance
-        | BuffKind::Bloodfeast
-        | BuffKind::Berserk
-        | BuffKind::Bleeding
-        | BuffKind::Cursed
-        | BuffKind::Burning
-        | BuffKind::Crippled
-        | BuffKind::Frozen
-        | BuffKind::Wet
-        | BuffKind::Ensnared
-        | BuffKind::Poisoned
-        | BuffKind::Parried
-        | BuffKind::PotionSickness
-        | BuffKind::Heatstroke => unreachable!("is_simple() above"),
-    };
+    spec: Option<String>,
+) -> CmdResult<BuffData> {
+    if buff_kind.is_simple() {
+        Ok(BuffData::new(strength, Some(Secs(duration))))
+    } else {
+        let spec = spec.expect("spec must be passed to build_buff if buff_kind is not simple");
 
-    let buffdata = BuffData::new(strength, Some(Secs(duration))).with_misc_data(misc_data);
+        // Explicit match to remember that this function exists
+        let misc_data = match buff_kind {
+            BuffKind::Polymorphed => {
+                let Ok(npc::NpcBody(_id, mut body)) = spec.parse() else {
+                    return Err(Content::localized_with_args("command-buff-body-unknown", [
+                        ("spec", spec.clone()),
+                    ]));
+                };
+                MiscBuffData::Body(body())
+            },
+            BuffKind::Regeneration
+            | BuffKind::Saturation
+            | BuffKind::Potion
+            | BuffKind::Agility
+            | BuffKind::CampfireHeal
+            | BuffKind::Frenzied
+            | BuffKind::EnergyRegen
+            | BuffKind::IncreaseMaxEnergy
+            | BuffKind::IncreaseMaxHealth
+            | BuffKind::Invulnerability
+            | BuffKind::ProtectingWard
+            | BuffKind::Hastened
+            | BuffKind::Fortitude
+            | BuffKind::Reckless
+            | BuffKind::Flame
+            | BuffKind::Frigid
+            | BuffKind::Lifesteal
+            | BuffKind::ImminentCritical
+            | BuffKind::Fury
+            | BuffKind::Sunderer
+            | BuffKind::Defiance
+            | BuffKind::Bloodfeast
+            | BuffKind::Berserk
+            | BuffKind::Bleeding
+            | BuffKind::Cursed
+            | BuffKind::Burning
+            | BuffKind::Crippled
+            | BuffKind::Frozen
+            | BuffKind::Wet
+            | BuffKind::Ensnared
+            | BuffKind::Poisoned
+            | BuffKind::Parried
+            | BuffKind::PotionSickness
+            | BuffKind::Heatstroke => {
+                if buff_kind.is_simple() {
+                    unreachable!("is_simple() above")
+                } else {
+                    panic!("Buff Kind {buff_kind:?} is complex but has no defined spec parser")
+                }
+            },
+        };
 
-    cast_buff(buffkind, buffdata, server, target);
-    Ok(())
+        Ok(BuffData::new(strength, Some(Secs(duration))).with_misc_data(misc_data))
+    }
 }
 
 fn cast_buff(buffkind: BuffKind, data: BuffData, server: &mut Server, target: EcsEntity) {

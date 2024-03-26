@@ -5,6 +5,7 @@ BasicRanged(
     projectile: Poisonball(
         damage: 32.0,
         radius: 5.0,
+        knockback: 10.0,
         energy_regen: 5.0,
         min_falloff: 0.1,
     ),

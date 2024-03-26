@@ -27,7 +27,7 @@ singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["common-frontend/tracy", "client/tracy"]
 tracy-memory = ["tracy"] # enables heap profiling with tracy
-plugins = ["client/plugins", "common-assets/plugins"]
+plugins = ["client/plugins", "common-assets/plugins", "server/plugins"]
 egui-ui = ["voxygen-egui", "egui", "egui_wgpu_backend", "egui_winit_platform"]
 shaderc-from-source = ["shaderc/build-from-source"]
 discord = ["discord-sdk"]
@@ -127,6 +127,8 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 num_cpus = "1.0"
 inline_tweak = { workspace = true }
 itertools = { workspace = true }
+sha2 = { workspace = true }
+bitflags = { workspace = true, features = ["serde"] }
 
 # Discord RPC
 discord-sdk = { version = "0.3.0", optional = true }

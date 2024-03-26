@@ -1,10 +1,8 @@
 use common::{
     comp::{
-        inventory::item::MaterialStatManifest,
-        skills::{GeneralSkill, Skill},
-        tool::AbilityMap,
-        Auras, Buffs, CharacterActivity, CharacterState, Collider, Combo, Controller, Energy,
-        Health, Ori, Pos, Stats, Vel,
+        inventory::item::MaterialStatManifest, tool::AbilityMap, Auras, Buffs, CharacterActivity,
+        CharacterState, Collider, Combo, Controller, Energy, EnteredAuras, Health, Ori, Pos, Stats,
+        Vel,
     },
     resources::{DeltaTime, GameMode, Time},
     shared_server_config::ServerConstants,
@@ -43,6 +41,7 @@ pub fn setup(add_systems: impl Fn(&mut specs::DispatcherBuilder)) -> State {
         DEFAULT_WORLD_CHUNKS_LG,
         Arc::new(TerrainChunk::water(0)),
         add_systems,
+        common_state::plugin::PluginMgr::default(),
     );
     state.ecs_mut().insert(MaterialStatManifest::with_empty());
     state.ecs_mut().insert(AbilityMap::load().cloned());
@@ -130,13 +129,9 @@ pub fn create_player(state: &mut State) -> Entity {
         .with(Buffs::default())
         .with(Combo::default())
         .with(Auras::default())
-        .with(Energy::new(
-            body,
-            skill_set
-                .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
-                .unwrap_or(0),
-        ))
-        .with(Health::new(body, body.base_health()))
+        .with(EnteredAuras::default())
+        .with(Energy::new(body))
+        .with(Health::new(body))
         .with(skill_set)
         .with(Stats::empty(body))
         .build()

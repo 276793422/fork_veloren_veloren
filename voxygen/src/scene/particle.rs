@@ -946,11 +946,13 @@ impl ParticleMgr {
                             + usize::from(self.scheduler.heartbeats(Duration::from_millis(10))),
                         || {
                             Particle::new(
-                                Duration::from_secs(15),
+                                Duration::from_millis(250),
                                 time,
-                                ParticleMode::CampfireSmoke,
+                                ParticleMode::PortalFizz,
+                                // Output particles from broom, not from character ass
                                 interpolated.pos
-                                    + vel.map_or(Vec3::zero(), |v| -v.0 * dt * rng.gen::<f32>()),
+                                    - ori.to_horizontal().look_dir().to_vec()
+                                    - vel.map_or(Vec3::zero(), |v| v.0 * dt * rng.gen::<f32>()),
                             )
                         },
                     );
@@ -1859,8 +1861,8 @@ impl ParticleMgr {
                                         Duration::from_secs(3),
                                         time,
                                         ParticleMode::Ice,
-                                        pos.x + Vec3::unit_z() * z_start,
-                                        pos.x + offset.with_z(z_end),
+                                        pos + Vec3::unit_z() * z_start,
+                                        pos + offset.with_z(z_end),
                                     )
                                 },
                             );

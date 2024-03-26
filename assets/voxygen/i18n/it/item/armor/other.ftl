@@ -82,8 +82,8 @@ armor-misc-bag-knitted_red_pouch = Borsa rossa intrecciata
 armor-misc-bag-liana_kit = Kit di liane
     .desc = Tessuto da liane essiccate.
 
-armor-misc-bag-mindflayer_spellbag = Borsa per incantesimi dello scorticatore di anime
-    .desc = Puoi quasi percepire la presenza maligna dello scorticatore di anime fluire attraverso il tessuto.
+armor-misc-bag-mindflayer_spellbag = Borsa per incantesimi dell'illithid
+    .desc = Puoi quasi percepire la malvagità di un illithid che scorre attraverso il tessuto.
 
 armor-misc-bag-reliable_backpack = Zaino affidabile
     .desc = Non ti deluderà mai.

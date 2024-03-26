@@ -1,7 +1,7 @@
 ## Player events, $user_gender should be available
 
-hud-chat-online_msg = [{ $name }] is online now
-hud-chat-offline_msg = [{ $name }] went offline
+hud-chat-online_msg = [{ $name }] is online now.
+hud-chat-offline_msg = [{ $name }] went offline.
 hud-chat-goodbye = Goodbye!
 hud-chat-connection_lost = Connection lost. Kicking in { $time } seconds.
 
@@ -10,12 +10,12 @@ hud-chat-connection_lost = Connection lost. Kicking in { $time } seconds.
 hud-chat-tell-to = To [{ $alias }]: { $msg }
 hud-chat-tell-from = From [{ $alias }]: { $msg }
 
-# Npc /tell messages, no gender info, sadly
+## Npc /tell messages, no gender info, sadly
 
 hud-chat-tell-to-npc = To [{ $alias }]: { $msg }
 hud-chat-tell-from-npc = From [{ $alias }]: { $msg }
 
-# Generic messages
+## Generic messages
 
 hud-chat-message = [{ $alias }]: { $msg }
 hud-chat-message-with-name = [{ $alias }] { $name }: { $msg }

@@ -12,7 +12,7 @@ common-abilities-sceptre-wardingaura = Захисна Аура
 veloren-core-pseudo_abilities-sword-heavy_stance = Важка Cтійка
     .desc = Атаки у цій стійці можуть збити ворогів з рівноваги і завдати більше пошкоджень ворогам, які знаходяться в стані рівноваги, але вони повільніші
 veloren-core-pseudo_abilities-sword-agile_stance = Спритна Стійка
-    .desc = Атаки в цій стійці швидші, але слабші
+    .desc = Атаки в цій стійці швидші, але слабші.
 veloren-core-pseudo_abilities-sword-defensive_stance = Захисна Стійка
     .desc = Атаки в цій стійці можуть виконувати роль слабкого блокування або парирування
 veloren-core-pseudo_abilities-sword-crippling_stance = Руйнівна Стійка
@@ -333,3 +333,9 @@ common-abilities-axe-capsize = Оберт Смерті
     .desc =
         Похитніть всіх навколо себе важким обертовим ударом
         Автоматично оновлюється з могутнього замаху при 50 комбо
+# Debug abilities
+common-abilities-debug-glide_boost = Вруум
+    .desc = Дає вам силу досягати небес.
+# Debug abilities
+common-abilities-debug-evolve = Еволюція
+    .desc = Ви стаєте кращою версією себе.

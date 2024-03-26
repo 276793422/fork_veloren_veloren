@@ -117,12 +117,15 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-#[cfg(not(feature = "worldgen"))]
-use test_world::{IndexOwned, World};
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, trace, warn};
 use vek::*;
 pub use world::{civ::WorldCivStage, sim::WorldSimStage, WorldGenerateStage};
+#[cfg(not(feature = "worldgen"))]
+use {
+    common_net::msg::WorldMapMsg,
+    test_world::{IndexOwned, World},
+};
 
 use crate::{
     persistence::{DatabaseSettings, SqlLogMode},
@@ -277,6 +280,10 @@ impl Server {
 
         let pools = State::pools(GameMode::Server);
 
+        // Load plugins before generating the world.
+        #[cfg(feature = "plugins")]
+        let plugin_mgr = PluginMgr::from_asset_or_default();
+
         #[cfg(feature = "worldgen")]
         let (world, index) = World::generate(
             settings.world_seed,
@@ -308,6 +315,7 @@ impl Server {
             horizons: [(vec![0], vec![0]), (vec![0], vec![0])],
             alt: Grid::new(Vec2::new(1, 1), 1),
             sites: Vec::new(),
+            possible_starting_sites: Vec::new(),
             pois: Vec::new(),
             default_chunk: Arc::new(world.generate_oob_chunk()),
         };
@@ -318,7 +326,10 @@ impl Server {
 
         let mut state = State::server(
             Arc::clone(&pools),
+            #[cfg(feature = "worldgen")]
             world.sim().map_size_lg(),
+            #[cfg(not(feature = "worldgen"))]
+            common::terrain::map::MapSizeLg::new(Vec2::one()).unwrap(),
             Arc::clone(&map.default_chunk),
             |dispatcher_builder| {
                 add_local_systems(dispatcher_builder);
@@ -330,6 +341,8 @@ impl Server {
                     weather::add_server_systems(dispatcher_builder);
                 }
             },
+            #[cfg(feature = "plugins")]
+            plugin_mgr,
         );
         register_event_busses(state.ecs_mut());
         state.ecs_mut().insert(battlemode_buffer);
@@ -838,7 +851,16 @@ impl Server {
             }
         }
 
-        // Prevent anchor entity chains which are not currently supported
+        // Prevent anchor entity chains which are not currently supported due to:
+        // * potential cycles?
+        // * unloading a chain could occur across an unbounded number of ticks with the
+        //   current implementation.
+        // * in particular, we want to be able to unload all entities in a
+        //   limited number of ticks when a database error occurs and kicks all
+        //   players (not quiet sure on exact time frame, since it already
+        //   takes a tick after unloading all chunks for entities to despawn?),
+        //   see this thread and the discussion linked from there:
+        //   https://gitlab.com/veloren/veloren/-/merge_requests/2668#note_634913847
         let anchors = self.state.ecs().read_storage::<Anchor>();
         let anchored_anchor_entities: Vec<Entity> = (
             &self.state.ecs().entities(),
@@ -849,7 +871,13 @@ impl Server {
                 Anchor::Entity(anchor_entity) => Some(*anchor_entity),
                 _ => None,
             })
-            .filter(|anchor_entity| anchors.get(*anchor_entity).is_some())
+            // We allow Anchor::Entity(_) -> Anchor::Chunk(_) connections, since they can't chain further.
+            //
+            // NOTE: The entity with `Anchor::Entity` will unload one tick after the entity with `Anchor::Chunk`.
+            .filter(|anchor_entity| match anchors.get(*anchor_entity) {
+                Some(Anchor::Entity(_)) => true,
+                Some(Anchor::Chunk(_)) | None => false
+            })
             .collect();
         drop(anchors);
 

@@ -102,13 +102,13 @@ use common::{
         loot_owner::LootOwnerKind,
         pet::is_mountable,
         skillset::{skills::Skill, SkillGroupKind, SkillsPersistenceError},
-        BuffData, BuffKind, Health, Item, MapMarkerChange, PresenceKind,
+        BuffData, BuffKind, Health, Item, MapMarkerChange, PickupItem, PresenceKind,
     },
     consts::MAX_PICKUP_RANGE,
     link::Is,
     mounting::{Mount, Rider, VolumePos},
     outcome::Outcome,
-    resources::{Secs, Time},
+    resources::{ProgramTime, Secs, Time},
     slowjob::SlowJobPool,
     terrain::{SpriteKind, TerrainChunk, UnlockKind},
     trade::{ReducedInventory, TradeAction},
@@ -508,8 +508,8 @@ impl BuffIconKind {
                 data,
                 multiplicity: _,
             } => (
-                get_buff_title(*kind, localized_strings),
-                get_buff_desc(*kind, *data, localized_strings),
+                util::get_buff_title(*kind, localized_strings),
+                util::get_buff_desc(*kind, *data, localized_strings),
             ),
             Self::Stance(stance) => {
                 util::ability_description(stance.pseudo_ability_id(), localized_strings)
@@ -1271,6 +1271,9 @@ pub struct Hud {
     failed_entity_pickups: HashMap<EcsEntity, CollectFailedData>,
     new_loot_messages: VecDeque<LootMessage>,
     new_messages: VecDeque<comp::ChatMsg>,
+    // NOTE Used for storing messages sent while the chat is hidden. This is needed because NPC
+    // speech uses new_messages so we need to clear it every frame.
+    message_backlog: VecDeque<comp::ChatMsg>,
     new_notifications: VecDeque<Notification>,
     speech_bubbles: HashMap<Uid, comp::SpeechBubble>,
     content_bubbles: Vec<(Vec3<f32>, comp::SpeechBubble)>,
@@ -1292,6 +1295,7 @@ pub struct Hud {
     floaters: Floaters,
     voxel_minimap: VoxelMinimap,
     map_drag: Vec2<f64>,
+    force_chat: bool,
 }
 
 impl Hud {
@@ -1368,6 +1372,7 @@ impl Hud {
             failed_entity_pickups: HashMap::default(),
             new_loot_messages: VecDeque::new(),
             new_messages: VecDeque::new(),
+            message_backlog: VecDeque::new(),
             new_notifications: VecDeque::new(),
             speech_bubbles: HashMap::new(),
             content_bubbles: Vec::new(),
@@ -1427,6 +1432,7 @@ impl Hud {
                 block_floaters: Vec::new(),
             },
             map_drag: Vec2::zero(),
+            force_chat: false,
         }
     }
 
@@ -1463,6 +1469,7 @@ impl Hud {
         if global_state.settings.interface.map_show_voxel_map {
             self.voxel_minimap.maintain(client, &mut self.ui);
         }
+        let scale = self.ui.scale();
         let (ref mut ui_widgets, ref mut item_tooltip_manager, ref mut tooltip_manager) =
             &mut self.ui.set_widgets();
         // self.ui.set_item_widgets(); pulse time for pulsating elements
@@ -1488,7 +1495,7 @@ impl Hud {
             let interpolated = ecs.read_storage::<vcomp::Interpolated>();
             let scales = ecs.read_storage::<comp::Scale>();
             let bodies = ecs.read_storage::<comp::Body>();
-            let items = ecs.read_storage::<Item>();
+            let items = ecs.read_storage::<PickupItem>();
             let inventories = ecs.read_storage::<comp::Inventory>();
             let msm = ecs.read_resource::<MaterialStatManifest>();
             let entities = ecs.entities();
@@ -1985,8 +1992,8 @@ impl Hud {
             let pulse = self.pulse;
 
             let make_overitem =
-                |item: &Item, pos, distance, properties, fonts, interaction_options| {
-                    let quality = get_quality_col(item);
+                |item: &PickupItem, pos, distance, properties, fonts, interaction_options| {
+                    let quality = get_quality_col(item.item());
 
                     // Item
                     overitem::Overitem::new(
@@ -2194,7 +2201,7 @@ impl Hud {
                     item.set_amount(amount.clamp(1, item.max_amount()))
                         .expect("amount >= 1 and <= max_amount is always a valid amount");
                     make_overitem(
-                        &item,
+                        &PickupItem::new(item, ProgramTime(0.0)),
                         over_pos,
                         pos.distance_squared(player_pos),
                         overitem_properties,
@@ -3445,12 +3452,50 @@ impl Hud {
             }
         }
 
+        if global_state.settings.audio.subtitles {
+            Subtitles::new(
+                client,
+                &global_state.settings,
+                &global_state.audio.get_listener().clone(),
+                &mut global_state.audio.subtitles,
+                &self.fonts,
+                i18n,
+            )
+            .set(self.ids.subtitles, ui_widgets);
+        }
+
+        //Loot
+        LootScroller::new(
+            &mut self.new_loot_messages,
+            client,
+            &info,
+            &self.show,
+            &self.imgs,
+            &self.item_imgs,
+            &self.rot_imgs,
+            &self.fonts,
+            i18n,
+            &self.item_i18n,
+            &msm,
+            item_tooltip_manager,
+            self.pulse,
+        )
+        .set(self.ids.loot_scroller, ui_widgets);
+
+        self.new_loot_messages.clear();
+
         // Don't put NPC messages in chat box.
         self.new_messages
             .retain(|m| !matches!(m.chat_type, comp::ChatType::Npc(_)));
 
         // Chat box
-        if global_state.settings.interface.toggle_chat {
+        // Draw this after loot scroller and subtitles so it can be dragged
+        // even when hovering over them
+        // TODO look into parenting and then settings movable widgets to floating
+        if global_state.settings.interface.toggle_chat || self.force_chat {
+            for hidden in self.message_backlog.drain(..).rev() {
+                self.new_messages.push_front(hidden);
+            }
             for event in Chat::new(
                 &mut self.new_messages,
                 client,
@@ -3459,6 +3504,7 @@ impl Hud {
                 &self.imgs,
                 &self.fonts,
                 i18n,
+                scale,
             )
             .and_then(self.force_chat_input.take(), |c, input| c.input(input))
             .and_then(self.tab_complete.take(), |c, input| {
@@ -3488,44 +3534,28 @@ impl Hud {
                         self.show.settings_tab = SettingsTab::Chat;
                         self.show.settings(true);
                     },
+                    chat::Event::ResizeChat(size) => {
+                        global_state.settings.chat.chat_size_x = size.x;
+                        global_state.settings.chat.chat_size_y = size.y;
+                    },
+                    chat::Event::MoveChat(pos) => {
+                        global_state.settings.chat.chat_pos_x = pos.x;
+                        global_state.settings.chat.chat_pos_y = pos.y;
+                    },
+                    chat::Event::DisableForceChat => {
+                        self.force_chat = false;
+                    },
                 }
+            }
+        } else {
+            self.message_backlog.extend(self.new_messages.drain(..));
+            while self.message_backlog.len() > chat::MAX_MESSAGES {
+                self.message_backlog.pop_front();
             }
         }
 
-        if global_state.settings.audio.subtitles {
-            Subtitles::new(
-                client,
-                &global_state.settings,
-                &global_state.audio.get_listener().clone(),
-                &mut global_state.audio.subtitles,
-                &self.fonts,
-                i18n,
-            )
-            .set(self.ids.subtitles, ui_widgets);
-        }
-
-        self.new_messages = VecDeque::new();
-        self.new_notifications = VecDeque::new();
-
-        //Loot
-        LootScroller::new(
-            &mut self.new_loot_messages,
-            client,
-            &info,
-            &self.show,
-            &self.imgs,
-            &self.item_imgs,
-            &self.rot_imgs,
-            &self.fonts,
-            i18n,
-            &self.item_i18n,
-            &msm,
-            item_tooltip_manager,
-            self.pulse,
-        )
-        .set(self.ids.loot_scroller, ui_widgets);
-
-        self.new_loot_messages = VecDeque::new();
+        self.new_messages.clear();
+        self.new_notifications.clear();
 
         // Windows
 
@@ -3654,6 +3684,7 @@ impl Hud {
             if let (
                 Some(skill_set),
                 Some(inventory),
+                Some(char_state),
                 Some(health),
                 Some(energy),
                 Some(body),
@@ -3661,6 +3692,7 @@ impl Hud {
             ) = (
                 skill_sets.get(entity),
                 inventories.get(entity),
+                char_states.get(entity),
                 healths.get(entity),
                 energies.get(entity),
                 bodies.get(entity),
@@ -3674,6 +3706,7 @@ impl Hud {
                     skill_set,
                     active_abilities.get(entity).unwrap_or(&Default::default()),
                     inventory,
+                    char_state,
                     health,
                     energy,
                     poise,
@@ -4608,18 +4641,10 @@ impl Hud {
             if show.map {
                 let new_zoom_lvl = (global_state.settings.interface.map_zoom * factor)
                     .clamped(1.25, max_zoom / 64.0);
-
                 global_state.settings.interface.map_zoom = new_zoom_lvl;
-                global_state
-                    .settings
-                    .save_to_file_warn(&global_state.config_dir);
             } else if global_state.settings.interface.minimap_show {
                 let new_zoom_lvl = global_state.settings.interface.minimap_zoom * factor;
-
                 global_state.settings.interface.minimap_zoom = new_zoom_lvl;
-                global_state
-                    .settings
-                    .save_to_file_warn(&global_state.config_dir);
             }
 
             show.map && global_state.settings.interface.minimap_show
@@ -4688,6 +4713,7 @@ impl Hud {
                 self.ui.focus_widget(if self.typing() {
                     None
                 } else {
+                    self.force_chat = true;
                     Some(self.ids.chat)
                 });
                 true
@@ -4695,6 +4721,7 @@ impl Hud {
             WinEvent::InputUpdate(GameInput::Escape, true) => {
                 if self.typing() {
                     self.ui.focus_widget(None);
+                    self.force_chat = false;
                 } else if self.show.trade {
                     self.events.push(Event::TradeAction(TradeAction::Decline));
                 } else {
@@ -4720,6 +4747,7 @@ impl Hud {
                     GameInput::Command if state => {
                         self.force_chat_input = Some("/".to_owned());
                         self.force_chat_cursor = Some(Index { line: 0, char: 1 });
+                        self.force_chat = true;
                         self.ui.focus_widget(Some(self.ids.chat));
                         true
                     },
@@ -5239,96 +5267,6 @@ pub fn get_buff_image(buff: BuffKind, imgs: &Imgs) -> conrod_core::image::Id {
     }
 }
 
-pub fn get_buff_title(buff: BuffKind, localized_strings: &Localization) -> Cow<str> {
-    match buff {
-        // Buffs
-        BuffKind::Regeneration => localized_strings.get_msg("buff-title-heal"),
-        BuffKind::Saturation => localized_strings.get_msg("buff-title-saturation"),
-        BuffKind::Potion => localized_strings.get_msg("buff-title-potion"),
-        BuffKind::Agility => localized_strings.get_msg("buff-title-agility"),
-        BuffKind::CampfireHeal => localized_strings.get_msg("buff-title-campfire_heal"),
-        BuffKind::EnergyRegen => localized_strings.get_msg("buff-title-energy_regen"),
-        BuffKind::IncreaseMaxHealth => localized_strings.get_msg("buff-title-increase_max_health"),
-        BuffKind::IncreaseMaxEnergy => localized_strings.get_msg("buff-title-increase_max_energy"),
-        BuffKind::Invulnerability => localized_strings.get_msg("buff-title-invulnerability"),
-        BuffKind::ProtectingWard => localized_strings.get_msg("buff-title-protectingward"),
-        BuffKind::Frenzied => localized_strings.get_msg("buff-title-frenzied"),
-        BuffKind::Hastened => localized_strings.get_msg("buff-title-hastened"),
-        BuffKind::Fortitude => localized_strings.get_msg("buff-title-fortitude"),
-        BuffKind::Reckless => localized_strings.get_msg("buff-title-reckless"),
-        // BuffKind::SalamanderAspect => localized_strings.get_msg("buff-title-salamanderaspect"),
-        BuffKind::Flame => localized_strings.get_msg("buff-title-burn"),
-        BuffKind::Frigid => localized_strings.get_msg("buff-title-frigid"),
-        BuffKind::Lifesteal => localized_strings.get_msg("buff-title-lifesteal"),
-        BuffKind::ImminentCritical => localized_strings.get_msg("buff-title-imminentcritical"),
-        BuffKind::Fury => localized_strings.get_msg("buff-title-fury"),
-        BuffKind::Sunderer => localized_strings.get_msg("buff-title-sunderer"),
-        BuffKind::Defiance => localized_strings.get_msg("buff-title-defiance"),
-        BuffKind::Bloodfeast => localized_strings.get_msg("buff-title-bloodfeast"),
-        BuffKind::Berserk => localized_strings.get_msg("buff-title-berserk"),
-        // Debuffs
-        BuffKind::Bleeding => localized_strings.get_msg("buff-title-bleed"),
-        BuffKind::Cursed => localized_strings.get_msg("buff-title-cursed"),
-        BuffKind::Burning => localized_strings.get_msg("buff-title-burn"),
-        BuffKind::Crippled => localized_strings.get_msg("buff-title-crippled"),
-        BuffKind::Frozen => localized_strings.get_msg("buff-title-frozen"),
-        BuffKind::Wet => localized_strings.get_msg("buff-title-wet"),
-        BuffKind::Ensnared => localized_strings.get_msg("buff-title-ensnared"),
-        BuffKind::Poisoned => localized_strings.get_msg("buff-title-poisoned"),
-        BuffKind::Parried => localized_strings.get_msg("buff-title-parried"),
-        BuffKind::PotionSickness => localized_strings.get_msg("buff-title-potionsickness"),
-        BuffKind::Polymorphed => localized_strings.get_msg("buff-title-polymorphed"),
-        BuffKind::Heatstroke => localized_strings.get_msg("buff-title-heatstroke"),
-    }
-}
-
-pub fn get_buff_desc(buff: BuffKind, data: BuffData, localized_strings: &Localization) -> Cow<str> {
-    match buff {
-        // Buffs
-        BuffKind::Regeneration => localized_strings.get_msg("buff-desc-heal"),
-        BuffKind::Saturation => localized_strings.get_msg("buff-desc-saturation"),
-        BuffKind::Potion => localized_strings.get_msg("buff-desc-potion"),
-        BuffKind::Agility => localized_strings.get_msg("buff-desc-agility"),
-        BuffKind::CampfireHeal => {
-            localized_strings.get_msg_ctx("buff-desc-campfire_heal", &i18n::fluent_args! {
-                "rate" => data.strength * 100.0
-            })
-        },
-        BuffKind::EnergyRegen => localized_strings.get_msg("buff-desc-energy_regen"),
-        BuffKind::IncreaseMaxHealth => localized_strings.get_msg("buff-desc-increase_max_health"),
-        BuffKind::IncreaseMaxEnergy => localized_strings.get_msg("buff-desc-increase_max_energy"),
-        BuffKind::Invulnerability => localized_strings.get_msg("buff-desc-invulnerability"),
-        BuffKind::ProtectingWard => localized_strings.get_msg("buff-desc-protectingward"),
-        BuffKind::Frenzied => localized_strings.get_msg("buff-desc-frenzied"),
-        BuffKind::Hastened => localized_strings.get_msg("buff-desc-hastened"),
-        BuffKind::Fortitude => localized_strings.get_msg("buff-desc-fortitude"),
-        BuffKind::Reckless => localized_strings.get_msg("buff-desc-reckless"),
-        // BuffKind::SalamanderAspect => localized_strings.get_msg("buff-desc-salamanderaspect"),
-        BuffKind::Flame => localized_strings.get_msg("buff-desc-flame"),
-        BuffKind::Frigid => localized_strings.get_msg("buff-desc-frigid"),
-        BuffKind::Lifesteal => localized_strings.get_msg("buff-desc-lifesteal"),
-        BuffKind::ImminentCritical => localized_strings.get_msg("buff-desc-imminentcritical"),
-        BuffKind::Fury => localized_strings.get_msg("buff-desc-fury"),
-        BuffKind::Sunderer => localized_strings.get_msg("buff-desc-sunderer"),
-        BuffKind::Defiance => localized_strings.get_msg("buff-desc-defiance"),
-        BuffKind::Bloodfeast => localized_strings.get_msg("buff-desc-bloodfeast"),
-        BuffKind::Berserk => localized_strings.get_msg("buff-desc-berserk"),
-        // Debuffs
-        BuffKind::Bleeding => localized_strings.get_msg("buff-desc-bleed"),
-        BuffKind::Cursed => localized_strings.get_msg("buff-desc-cursed"),
-        BuffKind::Burning => localized_strings.get_msg("buff-desc-burn"),
-        BuffKind::Crippled => localized_strings.get_msg("buff-desc-crippled"),
-        BuffKind::Frozen => localized_strings.get_msg("buff-desc-frozen"),
-        BuffKind::Wet => localized_strings.get_msg("buff-desc-wet"),
-        BuffKind::Ensnared => localized_strings.get_msg("buff-desc-ensnared"),
-        BuffKind::Poisoned => localized_strings.get_msg("buff-desc-poisoned"),
-        BuffKind::Parried => localized_strings.get_msg("buff-desc-parried"),
-        BuffKind::PotionSickness => localized_strings.get_msg("buff-desc-potionsickness"),
-        BuffKind::Polymorphed => localized_strings.get_msg("buff-desc-polymorphed"),
-        BuffKind::Heatstroke => localized_strings.get_msg("buff-desc-heatstroke"),
-    }
-}
-
 pub fn get_sprite_desc(sprite: SpriteKind, localized_strings: &Localization) -> Option<Cow<str>> {
     let i18n_key = match sprite {
         SpriteKind::Empty => return None,
@@ -5392,7 +5330,14 @@ pub fn angle_of_attack_text(
     if v_sq.abs() > 0.0001 {
         let rel_flow_dir = Dir::new(rel_flow / v_sq.sqrt());
         let aoe = fluid_dynamics::angle_of_attack(&glider_ori, &rel_flow_dir);
-        format!("Angle of Attack: {:.1}", aoe.to_degrees())
+        let (rel_x, rel_y, rel_z) = (rel_flow.x, rel_flow.y, rel_flow.z);
+        format!(
+            "Angle of Attack: {:.1} ({:.1},{:.1},{:.1})",
+            aoe.to_degrees(),
+            rel_x,
+            rel_y,
+            rel_z
+        )
     } else {
         "Angle of Attack: Not moving".to_owned()
     }

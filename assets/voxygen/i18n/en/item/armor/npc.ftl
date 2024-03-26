@@ -623,7 +623,7 @@ common-items-npc_armor-biped_large-harvester = Harvester Shirt
     .desc = Made of sunflowers.
 
 common-items-npc_armor-biped_large-mindflayer = Mindflayer Armor
-    .desc = Worn by mindflayer.
+    .desc = Worn by mindflayers.
 
 common-items-npc_armor-biped_large-minotaur = Minotaur Armor
     .desc = The best defense is a good offense.
@@ -906,4 +906,3 @@ armor-misc-foot-jackalope = Fluffy Jackalope Slippers
 
 armor-misc-foot-ski = Wooden skis
     .desc = Best used downhill on snow.
-    

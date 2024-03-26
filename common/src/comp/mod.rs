@@ -49,7 +49,7 @@ pub use self::{
         TradingBehavior,
     },
     anchor::Anchor,
-    aura::{Aura, AuraChange, AuraKind, Auras},
+    aura::{Aura, AuraChange, AuraKind, Auras, EnteredAuras},
     beam::Beam,
     body::{
         arthropod, biped_large, biped_small, bird_large, bird_medium, crustacean, dragon,
@@ -78,7 +78,7 @@ pub use self::{
             self,
             item_key::ItemKey,
             tool::{self, AbilityItem},
-            Item, ItemConfig, ItemDrops,
+            Item, ItemConfig, ItemDrops, PickupItem,
         },
         slot, CollectFailedReason, Inventory, InventoryUpdate, InventoryUpdateEvent,
     },

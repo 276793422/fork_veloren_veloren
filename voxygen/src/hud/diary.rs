@@ -33,13 +33,12 @@ use common::{
             slot::EquipSlot,
         },
         skills::{
-            self, AxeSkill, BowSkill, ClimbSkill, GeneralSkill, HammerSkill, MiningSkill,
-            RollSkill, SceptreSkill, Skill, StaffSkill, SwimSkill, SwordSkill, SKILL_MODIFIERS,
+            self, AxeSkill, BowSkill, ClimbSkill, HammerSkill, MiningSkill, SceptreSkill, Skill,
+            StaffSkill, SwimSkill, SwordSkill, SKILL_MODIFIERS,
         },
         skillset::{SkillGroupKind, SkillSet},
-        Body, Energy, Health, Inventory, Poise,
+        Body, CharacterState, Energy, Health, Inventory, Poise,
     },
-    consts::{ENERGY_PER_LEVEL, HP_PER_LEVEL},
 };
 use conrod_core::{
     color, image,
@@ -212,6 +211,7 @@ pub struct Diary<'a> {
     skill_set: &'a SkillSet,
     active_abilities: &'a ActiveAbilities,
     inventory: &'a Inventory,
+    char_state: &'a CharacterState,
     health: &'a Health,
     energy: &'a Energy,
     poise: &'a Poise,
@@ -258,6 +258,7 @@ impl<'a> Diary<'a> {
         skill_set: &'a SkillSet,
         active_abilities: &'a ActiveAbilities,
         inventory: &'a Inventory,
+        char_state: &'a CharacterState,
         health: &'a Health,
         energy: &'a Energy,
         poise: &'a Poise,
@@ -280,6 +281,7 @@ impl<'a> Diary<'a> {
             skill_set,
             active_abilities,
             inventory,
+            char_state,
             health,
             energy,
             poise,
@@ -838,6 +840,7 @@ impl<'a> Widget for Diary<'a> {
                         self.inventory,
                         self.skill_set,
                         self.context,
+                        Some(self.char_state),
                     ),
                     image_source: self.imgs,
                     slot_manager: Some(self.slot_manager),
@@ -852,7 +855,12 @@ impl<'a> Widget for Diary<'a> {
                             Some(self.inventory),
                             Some(self.skill_set),
                         )
-                        .ability_id(Some(self.inventory), Some(self.skill_set), self.context);
+                        .ability_id(
+                            Some(self.char_state),
+                            Some(self.inventory),
+                            Some(self.skill_set),
+                            self.context,
+                        );
                     let (ability_title, ability_desc) = if let Some(ability_id) = ability_id {
                         util::ability_description(ability_id, self.localized_strings)
                     } else {
@@ -912,59 +920,23 @@ impl<'a> Widget for Diary<'a> {
                         .set(state.ids.active_abilities_keys[i], ui);
                 }
 
-                let same_weap_kinds = self
-                    .inventory
-                    .equipped(EquipSlot::ActiveMainhand)
-                    .zip(self.inventory.equipped(EquipSlot::ActiveOffhand))
-                    .map_or(false, |(a, b)| {
-                        if let (ItemKind::Tool(tool_a), ItemKind::Tool(tool_b)) =
-                            (&*a.kind(), &*b.kind())
-                        {
-                            (a.ability_spec(), tool_a.kind) == (b.ability_spec(), tool_b.kind)
-                        } else {
-                            false
-                        }
-                    });
-
-                let main_weap_abilities = ActiveAbilities::iter_available_abilities(
+                let abilities: Vec<_> = ActiveAbilities::all_available_abilities(
                     Some(self.inventory),
                     Some(self.skill_set),
-                    EquipSlot::ActiveMainhand,
                 )
-                .map(AuxiliaryAbility::MainWeapon)
+                .into_iter()
                 .map(|a| {
                     (
                         Ability::from(a).ability_id(
+                            Some(self.char_state),
                             Some(self.inventory),
                             Some(self.skill_set),
                             self.context,
                         ),
                         a,
                     )
-                });
-                let off_weap_abilities = ActiveAbilities::iter_available_abilities(
-                    Some(self.inventory),
-                    Some(self.skill_set),
-                    EquipSlot::ActiveOffhand,
-                )
-                .map(AuxiliaryAbility::OffWeapon)
-                .map(|a| {
-                    (
-                        Ability::from(a).ability_id(
-                            Some(self.inventory),
-                            Some(self.skill_set),
-                            self.context,
-                        ),
-                        a,
-                    )
-                });
-
-                let abilities: Vec<_> = if same_weap_kinds {
-                    // When the weapons have the same ability kind take only the main weapons,
-                    main_weap_abilities.collect()
-                } else {
-                    main_weap_abilities.chain(off_weap_abilities).collect()
-                };
+                })
+                .collect();
 
                 const ABILITIES_PER_PAGE: usize = 12;
 
@@ -1065,11 +1037,26 @@ impl<'a> Widget for Diary<'a> {
                         self.inventory,
                         self.skill_set,
                         self.context,
+                        Some(self.char_state),
                     ),
                     image_source: self.imgs,
                     slot_manager: Some(self.slot_manager),
                     pulse: 0.0,
                 };
+
+                let same_weap_kinds = self
+                    .inventory
+                    .equipped(EquipSlot::ActiveMainhand)
+                    .zip(self.inventory.equipped(EquipSlot::ActiveOffhand))
+                    .map_or(false, |(a, b)| {
+                        if let (ItemKind::Tool(tool_a), ItemKind::Tool(tool_b)) =
+                            (&*a.kind(), &*b.kind())
+                        {
+                            (a.ability_spec(), tool_a.kind) == (b.ability_spec(), tool_b.kind)
+                        } else {
+                            false
+                        }
+                    });
 
                 for (id_index, (ability_id, ability)) in abilities
                     .iter()
@@ -1386,9 +1373,9 @@ impl<'a> Diary<'a> {
 
         // Number of skills per rectangle per weapon, start counting at 0
         // Maximum of 9 skills/8 indices
-        let skills_top_l = 2;
-        let skills_top_r = 6;
-        let skills_bot_l = 4;
+        let skills_top_l = 6;
+        let skills_top_r = 0;
+        let skills_bot_l = 0;
         let skills_bot_r = 5;
 
         self.setup_state_for_skill_icons(
@@ -1399,7 +1386,7 @@ impl<'a> Diary<'a> {
             skills_bot_l,
             skills_bot_r,
         );
-        use skills::{GeneralSkill::*, RollSkill::*};
+
         use SkillGroupKind::*;
         use ToolKind::*;
         // General Combat
@@ -1431,80 +1418,42 @@ impl<'a> Diary<'a> {
             //        5 1 6
             //        3 0 4
             //        8 2 7
-            SkillIcon::Unlockable {
-                skill: Skill::General(HealthIncrease),
-                image: self.imgs.health_plus_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_l[0], 3.0),
-                id: state.ids.skill_general_stat_0,
-            },
-            SkillIcon::Unlockable {
-                skill: Skill::General(EnergyIncrease),
-                image: self.imgs.energy_plus_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_l[1], 3.0),
-                id: state.ids.skill_general_stat_1,
-            },
-            // Top right skills
+            // Bottom left skills
             SkillIcon::Unlockable {
                 skill: Skill::UnlockGroup(Weapon(Sword)),
                 image: self.imgs.unlock_sword_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_r[0], 3.0),
+                position: MidTopWithMarginOn(state.ids.skills_top_l[0], 3.0),
                 id: state.ids.skill_general_tree_0,
             },
             SkillIcon::Unlockable {
                 skill: Skill::UnlockGroup(Weapon(Axe)),
                 image: self.imgs.unlock_axe_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_r[1], 3.0),
+                position: MidTopWithMarginOn(state.ids.skills_top_l[1], 3.0),
                 id: state.ids.skill_general_tree_1,
             },
             SkillIcon::Unlockable {
                 skill: Skill::UnlockGroup(Weapon(Hammer)),
                 image: self.imgs.unlock_hammer_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_r[2], 3.0),
+                position: MidTopWithMarginOn(state.ids.skills_top_l[2], 3.0),
                 id: state.ids.skill_general_tree_2,
             },
             SkillIcon::Unlockable {
                 skill: Skill::UnlockGroup(Weapon(Bow)),
                 image: self.imgs.unlock_bow_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_r[3], 3.0),
+                position: MidTopWithMarginOn(state.ids.skills_top_l[3], 3.0),
                 id: state.ids.skill_general_tree_3,
             },
             SkillIcon::Unlockable {
                 skill: Skill::UnlockGroup(Weapon(Staff)),
                 image: self.imgs.unlock_staff_skill0,
-                position: MidTopWithMarginOn(state.ids.skills_top_r[4], 3.0),
+                position: MidTopWithMarginOn(state.ids.skills_top_l[4], 3.0),
                 id: state.ids.skill_general_tree_4,
             },
             SkillIcon::Unlockable {
                 skill: Skill::UnlockGroup(Weapon(Sceptre)),
                 image: self.imgs.unlock_sceptre_skill,
-                position: MidTopWithMarginOn(state.ids.skills_top_r[5], 3.0),
+                position: MidTopWithMarginOn(state.ids.skills_top_l[5], 3.0),
                 id: state.ids.skill_general_tree_5,
-            },
-            // Bottom left skills
-            SkillIcon::Descriptive {
-                title: "hud-skill-dodge_title",
-                desc: "hud-skill-dodge",
-                image: self.imgs.skill_dodge_skill,
-                position: MidTopWithMarginOn(state.ids.skills_bot_l[0], 3.0),
-                id: state.ids.skill_general_roll_0,
-            },
-            SkillIcon::Unlockable {
-                skill: Skill::Roll(Cost),
-                image: self.imgs.utility_cost_skill,
-                position: MidTopWithMarginOn(state.ids.skills_bot_l[1], 3.0),
-                id: state.ids.skill_general_roll_1,
-            },
-            SkillIcon::Unlockable {
-                skill: Skill::Roll(Strength),
-                image: self.imgs.utility_speed_skill,
-                position: MidTopWithMarginOn(state.ids.skills_bot_l[2], 3.0),
-                id: state.ids.skill_general_roll_2,
-            },
-            SkillIcon::Unlockable {
-                skill: Skill::Roll(Duration),
-                image: self.imgs.utility_duration_skill,
-                position: MidTopWithMarginOn(state.ids.skills_bot_l[3], 3.0),
-                id: state.ids.skill_general_roll_3,
             },
             // Bottom right skills
             SkillIcon::Descriptive {
@@ -2861,7 +2810,6 @@ impl<'a> Diary<'a> {
 fn skill_strings(skill: Skill) -> SkillStrings<'static> {
     match skill {
         // general tree
-        Skill::General(s) => general_skill_strings(s),
         Skill::UnlockGroup(s) => unlock_skill_strings(s),
         // weapon trees
         Skill::Hammer(s) => hammer_skill_strings(s),
@@ -2869,27 +2817,11 @@ fn skill_strings(skill: Skill) -> SkillStrings<'static> {
         Skill::Staff(s) => staff_skill_strings(s),
         Skill::Sceptre(s) => sceptre_skill_strings(s),
         // movement trees
-        Skill::Roll(s) => roll_skill_strings(s),
         Skill::Climb(s) => climb_skill_strings(s),
         Skill::Swim(s) => swim_skill_strings(s),
         // mining
         Skill::Pick(s) => mining_skill_strings(s),
         _ => SkillStrings::plain("", ""),
-    }
-}
-
-fn general_skill_strings(skill: GeneralSkill) -> SkillStrings<'static> {
-    match skill {
-        GeneralSkill::HealthIncrease => SkillStrings::with_const(
-            "hud-skill-inc_health_title",
-            "hud-skill-inc_health",
-            u32::from(HP_PER_LEVEL),
-        ),
-        GeneralSkill::EnergyIncrease => SkillStrings::with_const(
-            "hud-skill-inc_energy_title",
-            "hud-skill-inc_energy",
-            u32::from(ENERGY_PER_LEVEL),
-        ),
     }
 }
 
@@ -3224,27 +3156,6 @@ fn sceptre_skill_strings(skill: SceptreSkill) -> SkillStrings<'static> {
             "hud-skill-sc_wardaura_cost_title",
             "hud-skill-sc_wardaura_cost",
             modifiers.warding_aura.energy_cost,
-        ),
-    }
-}
-
-fn roll_skill_strings(skill: RollSkill) -> SkillStrings<'static> {
-    let modifiers = SKILL_MODIFIERS.general_tree.roll;
-    match skill {
-        RollSkill::Cost => SkillStrings::with_mult(
-            "hud-skill-roll_energy_title",
-            "hud-skill-roll_energy",
-            modifiers.energy_cost,
-        ),
-        RollSkill::Strength => SkillStrings::with_mult(
-            "hud-skill-roll_speed_title",
-            "hud-skill-roll_speed",
-            modifiers.strength,
-        ),
-        RollSkill::Duration => SkillStrings::with_mult(
-            "hud-skill-roll_dur_title",
-            "hud-skill-roll_dur",
-            modifiers.duration,
         ),
     }
 }

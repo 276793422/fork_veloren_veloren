@@ -1,11 +1,8 @@
 use common::{
     combat,
     comp::{
-        self,
-        item::MaterialStatManifest,
-        skills::{GeneralSkill, Skill},
-        Body, CharacterState, Combo, Energy, Health, Inventory, Poise, Pos, SkillSet, Stats,
-        StatsModifier,
+        self, item::MaterialStatManifest, CharacterState, Combo, Energy, Health, Inventory, Poise,
+        Pos, Stats, StatsModifier,
     },
     event::{DestroyEvent, EmitExt},
     event_emitters,
@@ -33,7 +30,6 @@ pub struct ReadData<'a> {
     time: Read<'a, Time>,
     events: Events<'a>,
     positions: ReadStorage<'a, Pos>,
-    bodies: ReadStorage<'a, Body>,
     char_states: ReadStorage<'a, CharacterState>,
     inventories: ReadStorage<'a, Inventory>,
     msm: ReadExpect<'a, MaterialStatManifest>,
@@ -46,7 +42,6 @@ impl<'a> System<'a> for Sys {
     type SystemData = (
         ReadData<'a>,
         WriteStorage<'a, Stats>,
-        WriteStorage<'a, SkillSet>,
         WriteStorage<'a, Health>,
         WriteStorage<'a, Poise>,
         WriteStorage<'a, Energy>,
@@ -63,7 +58,6 @@ impl<'a> System<'a> for Sys {
         (
             read_data,
             stats,
-            mut skill_sets,
             mut healths,
             mut poises,
             mut energies,
@@ -120,31 +114,6 @@ impl<'a> System<'a> for Sys {
             }
         });
 
-        // Apply effects from leveling skills
-        let join = (
-            &mut skill_sets,
-            &mut healths,
-            &mut energies,
-            &read_data.bodies,
-        )
-            .lend_join();
-        join.for_each(|(mut skill_set, mut health, mut energy, body)| {
-            if skill_set.modify_health {
-                let health_level = skill_set
-                    .skill_level(Skill::General(GeneralSkill::HealthIncrease))
-                    .unwrap_or(0);
-                health.update_max_hp(*body, health_level);
-                skill_set.modify_health = false;
-            }
-            if skill_set.modify_energy {
-                let energy_level = skill_set
-                    .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
-                    .unwrap_or(0);
-                energy.update_max_energy(*body, energy_level);
-                skill_set.modify_energy = false;
-            }
-        });
-
         // Update energies and poises
         let join = (&read_data.char_states, &mut energies, &mut poises).lend_join();
         join.for_each(|(character_state, mut energy, mut poise)| {
@@ -162,8 +131,8 @@ impl<'a> System<'a> for Sys {
                 CharacterState::Idle(_)
                 | CharacterState::Talk
                 | CharacterState::Dance
-                | CharacterState::Glide(_)
                 | CharacterState::Skate(_)
+                | CharacterState::Glide(_)
                 | CharacterState::GlideWield(_)
                 | CharacterState::Wielding(_)
                 | CharacterState::Equipping(_)

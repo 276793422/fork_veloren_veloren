@@ -31,7 +31,7 @@ use common::{
         GroupManip, InputKind, InventoryAction, InventoryEvent, InventoryUpdateEvent,
         MapMarkerChange, PresenceKind, UtteranceKind,
     },
-    event::{EventBus, LocalEvent, UpdateCharacterMetadata},
+    event::{EventBus, LocalEvent, PluginHash, UpdateCharacterMetadata},
     grid::Grid,
     link::Is,
     lod,
@@ -64,6 +64,8 @@ use common_net::{
     },
     sync::WorldSyncExt,
 };
+#[cfg(feature = "plugins")]
+use common_state::plugin::PluginMgr;
 use common_state::State;
 use common_systems::add_local_systems;
 use comp::BuffKind;
@@ -82,6 +84,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     fmt::Debug,
     mem,
+    path::PathBuf,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
@@ -120,6 +123,7 @@ pub enum Event {
     MapMarker(comp::MapMarkerUpdate),
     StartSpectate(Vec3<f32>),
     SpectatePosition(Vec3<f32>),
+    PluginDataReceived(Vec<u8>),
 }
 
 #[derive(Debug)]
@@ -237,6 +241,9 @@ impl WeatherLerp {
                 .zip(old.iter().zip(new.iter()))
                 .for_each(|((_, current), ((_, old), (_, new)))| {
                     *current = CompressedWeather::lerp_unclamped(old, new, t);
+                    // `local_wind` is set for all weather cells on the client,
+                    // which will still be inaccurate outside the "local" area
+                    current.wind = self.local_wind;
                 });
         }
     }
@@ -323,6 +330,10 @@ pub struct Client {
     dt_adjustment: f64,
 
     connected_server_constants: ServerConstants,
+    /// Requested but not yet received plugins
+    missing_plugins: HashSet<PluginHash>,
+    /// Locally cached plugins needed by the server
+    local_plugins: Vec<PathBuf>,
 }
 
 /// Holds data related to the current players characters, as well as some
@@ -389,6 +400,7 @@ impl Client {
         auth_trusted: impl FnMut(&str) -> bool,
         init_stage_update: &(dyn Fn(ClientInitStage) + Send + Sync),
         add_foreign_systems: impl Fn(&mut DispatcherBuilder) + Send + 'static,
+        config_dir: PathBuf,
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
@@ -577,6 +589,7 @@ impl Client {
             server_constants,
             repair_recipe_book,
             description,
+            active_plugins,
         } = loop {
             tokio::select! {
                 // Spawn in a blocking thread (leaving the network thread free).  This is mostly
@@ -610,7 +623,28 @@ impl Client {
                     add_local_systems(dispatch_builder);
                     add_foreign_systems(dispatch_builder);
                 },
+                #[cfg(feature = "plugins")]
+                common_state::plugin::PluginMgr::from_asset_or_default(),
             );
+            let mut missing_plugins: Vec<PluginHash> = Vec::new();
+            let mut local_plugins: Vec<PathBuf> = Vec::new();
+            #[cfg(feature = "plugins")]
+            {
+                let already_present = state.ecs().read_resource::<PluginMgr>().plugin_list();
+                for hash in active_plugins.iter() {
+                    if !already_present.contains(hash) {
+                        // look in config_dir first (cache)
+                        if let Ok(local_path) = common_state::plugin::find_cached(&config_dir, hash)
+                        {
+                            local_plugins.push(local_path);
+                        } else {
+                            //tracing::info!("cache not found {local_path:?}");
+                            tracing::info!("Server requires plugin {hash:x?}");
+                            missing_plugins.push(*hash);
+                        }
+                    }
+                }
+            }
             // Client-only components
             state.ecs_mut().register::<comp::Last<CharacterState>>();
             let entity = state.ecs_mut().apply_entity_package(entity_package);
@@ -884,6 +918,8 @@ impl Client {
                 repair_recipe_book,
                 max_group_size,
                 client_timeout,
+                missing_plugins,
+                local_plugins,
             ))
         });
 
@@ -901,12 +937,18 @@ impl Client {
             repair_recipe_book,
             max_group_size,
             client_timeout,
+            missing_plugins,
+            local_plugins,
         ) = loop {
             tokio::select! {
                 res = &mut task => break res.expect("Client thread should not panic")?,
                 _ = ping_interval.tick() => ping_stream.send(PingMsg::Ping)?,
             }
         };
+        let missing_plugins_set = missing_plugins.iter().cloned().collect();
+        if !missing_plugins.is_empty() {
+            stream.send(ClientGeneral::RequestPlugins(missing_plugins))?;
+        }
         ping_stream.send(PingMsg::Ping)?;
 
         debug!("Initial sync done");
@@ -987,6 +1029,8 @@ impl Client {
             dt_adjustment: 1.0,
 
             connected_server_constants: server_constants,
+            missing_plugins: missing_plugins_set,
+            local_plugins,
         })
     }
 
@@ -1120,7 +1164,8 @@ impl Client {
                     // Always possible
                     ClientGeneral::ChatMsg(_)
                     | ClientGeneral::Command(_, _)
-                    | ClientGeneral::Terminate => &mut self.general_stream,
+                    | ClientGeneral::Terminate
+                    | ClientGeneral::RequestPlugins(_) => &mut self.general_stream,
                 };
                 #[cfg(feature = "tracy")]
                 {
@@ -2536,6 +2581,11 @@ impl Client {
             ServerGeneral::Notification(n) => {
                 frontend_events.push(Event::Notification(n));
             },
+            ServerGeneral::PluginData(d) => {
+                let plugin_len = d.len();
+                tracing::info!(?plugin_len, "plugin data");
+                frontend_events.push(Event::PluginDataReceived(d));
+            },
             _ => unreachable!("Not a general msg"),
         }
         Ok(())
@@ -3179,6 +3229,20 @@ impl Client {
 
         Ok(())
     }
+
+    /// another plugin data received, is this the last one
+    pub fn plugin_received(&mut self, hash: PluginHash) -> usize {
+        if !self.missing_plugins.remove(&hash) {
+            tracing::warn!(?hash, "received unrequested plugin");
+        }
+        self.missing_plugins.len()
+    }
+
+    /// number of requested plugins
+    pub fn num_missing_plugins(&self) -> usize { self.missing_plugins.len() }
+
+    /// extract list of locally cached plugins to load
+    pub fn take_local_plugins(&mut self) -> Vec<PathBuf> { std::mem::take(&mut self.local_plugins) }
 }
 
 impl Drop for Client {
@@ -3244,6 +3308,7 @@ mod tests {
             |suggestion: &str| suggestion == auth_server,
             &|_| {},
             |_| {},
+            PathBuf::default(),
         ));
         let localisation = LocalizationHandle::load_expect("en");
 

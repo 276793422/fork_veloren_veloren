@@ -50,24 +50,29 @@ impl<'a> AgentData<'a> {
     ////////////////////////////////////////
     // Action Nodes
     ////////////////////////////////////////
-
-    pub fn glider_fall(&self, controller: &mut Controller, read_data: &ReadData) {
+    pub fn glider_equip(&self, controller: &mut Controller, read_data: &ReadData) {
         self.dismount(controller, read_data);
-
         controller.push_action(ControlAction::GlideWield);
+    }
 
-        let flight_direction =
-            Vec3::from(self.vel.0.xy().try_normalized().unwrap_or_else(Vec2::zero));
-        let flight_ori = Quaternion::from_scalar_and_vec3((1.0, flight_direction));
-
-        let ori = self.ori.look_vec();
-        let look_dir = if ori.z > 0.0 {
-            flight_ori.rotated_x(-0.1)
-        } else {
-            flight_ori.rotated_x(0.1)
+    // TODO: add the ability to follow the target?
+    pub fn glider_flight(&self, controller: &mut Controller, _read_data: &ReadData) {
+        let Some(fluid) = self.physics_state.in_fluid else {
+            return;
         };
 
-        let (_, look_dir) = look_dir.into_scalar_and_vec3();
+        let vel = self.vel;
+
+        let comp::Vel(rel_flow) = fluid.relative_flow(vel);
+
+        let is_wind_downwards = rel_flow.z.is_sign_negative();
+
+        let look_dir = if is_wind_downwards {
+            Vec3::from(-rel_flow.xy())
+        } else {
+            -rel_flow
+        };
+
         controller.inputs.look_dir = Dir::from_unnormalized(look_dir).unwrap_or_else(Dir::forward);
     }
 
@@ -1582,9 +1587,14 @@ impl<'a> AgentData<'a> {
                 read_data,
                 rng,
             ),
-            Tactic::Cursekeeper => {
-                self.handle_cursekeeper_attack(agent, controller, tgt_data, read_data, rng)
-            },
+            Tactic::Cursekeeper => self.handle_cursekeeper_attack(
+                agent,
+                controller,
+                &attack_data,
+                tgt_data,
+                read_data,
+                rng,
+            ),
             Tactic::CursekeeperFake => {
                 self.handle_cursekeeper_fake_attack(agent, controller, &attack_data)
             },

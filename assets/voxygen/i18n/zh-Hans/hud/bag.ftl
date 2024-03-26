@@ -27,7 +27,7 @@ hud-bag-energy = 耐力值
 hud-bag-combat_rating = 战力
 hud-bag-protection = 防御
 hud-bag-stun_res = 韧性恢复
-hud-bag-stealth = Stealth
+hud-bag-stealth = 隐蔽性
 hud-bag-combat_rating_desc =
     根据你的装备
     和血量综合计算得出的数值.

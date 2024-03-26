@@ -12,7 +12,7 @@ use crate::{
 use client::{self, Client};
 use common::{
     comp,
-    comp::group::Role,
+    comp::{group::Role},
     grid::Grid,
     slowjob::SlowJobPool,
     terrain::{
@@ -377,6 +377,8 @@ widget_ids! {
         location_marker,
         location_marker_group[],
         voxel_minimap,
+        mmap_user_poi,
+        mmap_world_time,
     }
 }
 
@@ -903,6 +905,124 @@ impl<'a> Widget for MiniMap<'a> {
                     })
                     .parent(ui.window)
                     .set(*id, ui);
+            }
+            {
+                
+                let dir = Vec2::new(0.0, -1.0);
+                let cardinal_dir = Vec2::unit_x().rotated_z(orientation.x as f64) * dir.x
+                    + Vec2::unit_y().rotated_z(orientation.x as f64) * dir.y;
+                let clamped = cardinal_dir / cardinal_dir.map(|e| e.abs()).reduce_partial_max();
+                let pos = clamped * (map_size / 2.0 - 10.0);
+                //  current user pos
+                let mut low_count = 1;
+                {
+                    let id = state.ids.mmap_user_poi;
+                    let user_pos = format!("x:{:.0}  y:{:.0}  z:{:.0}", player_pos.x, player_pos.y, player_pos.z);
+                    Text::new(&user_pos)
+                        .x_y_position_relative_to(
+                            state.ids.map_layers[0],
+                            position::Relative::Scalar(pos.x),
+                            position::Relative::Scalar(pos.y - ((self.fonts.cyri.scale(18) * low_count) as f64)),
+                        )
+                        .font_size(self.fonts.cyri.scale(18))
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .color(Color::Rgba(1.0, 0.0, 0.0, 1.0))
+                        .parent(ui.window)
+                        .set(id, ui);
+                    low_count += 1;
+                }
+                //  current world time
+                {
+                    let id = state.ids.mmap_world_time;
+                    let time_in_seconds = self.client.state().get_time_of_day();
+                    let current_time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(
+                            // Wraps around back to 0s if it exceeds 24 hours (24 hours = 86400s)
+                            (time_in_seconds as u64 % 86400) as u32,
+                            0,
+                        )
+                        .expect("time always valid");
+                    let current_time = format!("Time: {}", current_time.format("%H:%M:%S"));
+                    Text::new(&current_time)
+                        .x_y_position_relative_to(
+                            state.ids.map_layers[0],
+                            position::Relative::Scalar(pos.x),
+                            position::Relative::Scalar(pos.y - ((self.fonts.cyri.scale(18) * low_count) as f64)),
+                        )
+                        .font_size(self.fonts.cyri.scale(18))
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .color(Color::Rgba(1.0, 0.0, 0.0, 1.0))
+                        .parent(ui.window)
+                        .set(id, ui);
+                    //low_count += 1;
+                }
+                {
+                    /*
+                    let player_list = self.client.player_list();
+                    for (k , v) in player_list.iter() {
+                        tracing::info!("\t\t info : {:?} => {:?} ", k, v);
+                    }
+                    
+                    tracing::info!("players : {:?}", self.client.players().count());
+                    for v in self.client.players() {
+                        tracing::info!("\t\t players : {}", v);
+                    }
+
+                    let ecs_world =self.client.state().ecs();
+                    tracing::info!("comp::Pos count : {:?}", ecs_world.read_storage::<comp::Pos>().count());
+                    tracing::info!("comp::ItemDrops count : {:?}", ecs_world.read_storage::<comp::ItemDrops>().count());
+                    tracing::info!("comp::Last<comp::Pos> count : {:?}", ecs_world.read_storage::<comp::Last<comp::Pos>>().count());
+                    tracing::info!("comp::Agent count : {:?}", ecs_world.read_storage::<comp::Agent>().count());
+                    tracing::info!("comp::Object count : {:?}", ecs_world.read_storage::<comp::Object>().count());
+                    */
+                }
+                {
+                    /*
+                    let client_items_object = self
+                        .client
+                        .state()
+                        .ecs()
+                        .read_storage::<comp::Inventory>();
+                    
+                    let client_items = client_items_object.get(self.client.entity());
+
+                    match client_items {
+                        None => {},
+                        Some(inventory_all) => {
+
+                            let items_chain = inventory_all
+                                .overflow_items()
+                                .enumerate()
+                                .map(|(i, item)| (Slot::Overflow(i), Some(item)));
+                
+                            tracing::info!("items_chain ----- {:?} ", items_chain.count());
+                            
+                            let items_chain = inventory_all
+                                .overflow_items()
+                                .enumerate()
+                                .map(|(i, item)| (Slot::Overflow(i), Some(item)));
+                
+                            let items = inventory_all
+                                .slots_with_id()
+                                .map(|(slot, item)| (Slot::Inventory(slot), item.as_ref()))
+                                .chain(items_chain)
+                                .collect::<Vec<_>>();
+                            
+                            tracing::info!("items       ----- {:?} ", items.len());
+
+                            for (_, item) in items.into_iter() {
+                                match item {
+                                    None => {
+                                        
+                                    },
+                                    Some(it) => {
+                                        tracing::info!("\t {:?} => {:?}", it.amount(), it.persistence_item_id());
+                                    },
+                                }
+                            }
+                        },
+                    }
+                    */
+                }
             }
         } else {
             Image::new(self.imgs.mmap_frame_closed)

@@ -1969,6 +1969,49 @@ impl From<&ItemDefinitionId<'_>> for ItemDefinitionIdOwned {
 mod tests {
     use super::*;
 
+    use std::{fs, path::Path};
+    use ron;
+    
+    fn traverse_directory(dir_path: &str) -> usize {
+        let entries = fs::read_dir(dir_path).unwrap();
+        let mut n_count: usize = 0;
+
+        for entry in entries {
+            let entry = entry.unwrap();
+            let pathbuf = entry.path();
+            let path = Path::new(pathbuf.as_path());
+
+            if path.is_dir() {
+                // println!("目录： {}", path.display());
+                n_count = n_count + traverse_directory(path.as_os_str().to_str().unwrap());
+            } else {
+                let file_path = path.display();
+                println!("文件： {}", file_path);
+
+                let source = fs::File::open(file_path.to_string()).unwrap();
+                let arr = ron::de::from_reader(source);
+                let old: RawItemDef = arr.unwrap();
+
+                println!("\t  name        : {}", old.legacy_name);
+                println!("\t  description : {}", old.legacy_description);
+                
+                n_count = n_count + 1;
+            }
+        }
+
+        n_count
+    }
+
+
+    #[test]
+    fn test_assets_items_iterator() {
+        let dir_path = "E:/Game/veloren_root/veloren/assets/common/items";
+        let n_count = traverse_directory(&dir_path);
+
+        println!("Count : {}", n_count);
+        // let response = post("Response: {}", response);
+    }
+
     #[test]
     fn test_assets_items() {
         let ids = all_item_defs_expect();

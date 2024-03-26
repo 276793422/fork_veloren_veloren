@@ -70,6 +70,7 @@ widget_ids! {
         inv_textslots[],
         offer_headers[],
         accept_indicators[],
+        indicators_cash[],
         phase_indicator,
         accept_button,
         decline_button,
@@ -149,12 +150,12 @@ const MAX_TRADE_SLOTS: usize = 16;
 impl<'a> Trade<'a> {
     fn background(&mut self, state: &mut ConrodState<'_, State>, ui: &mut UiCell<'_>) {
         Image::new(self.imgs.inv_middle_bg_bag)
-            .w_h(424.0, 482.0)
+            .w_h(424.0, 512.0)
             .color(Some(UI_MAIN))
             .mid_bottom_with_margin_on(ui.window, 295.0)
             .set(state.ids.bg, ui);
         Image::new(self.imgs.inv_middle_frame)
-            .w_h(424.0, 482.0)
+            .w_h(424.0, 512.0)
             .middle_of(state.ids.bg)
             .color(Some(UI_HIGHLIGHT_0))
             .set(state.ids.bg_frame, ui);
@@ -262,6 +263,44 @@ impl<'a> Trade<'a> {
             .color(Color::Rgba(1.0, 1.0, 1.0, 1.0))
             .set(state.ids.offer_headers[who], ui);
 
+        let ecs = self.client.state().ecs();
+        let inventories = specs::WorldExt::read_component::<common::comp::Inventory>(ecs);
+        let get_inventory = |uid: common::uid::Uid| {
+            if let Some(entity) = ecs.entity_from_uid(uid) {
+                inventories.get(entity)
+            } else {
+                None
+            }
+        };
+        let mut r_inventories = [None, None];
+        for (i, party) in trade.parties.iter().enumerate() {
+            match get_inventory(*party) {
+                Some(inventory) => {
+                    r_inventories[i] = Some(common::trade::ReducedInventory::from(inventory))
+                },
+                None => todo!(),
+            };
+        }
+
+        let balance_ret = prices.clone().expect("error 1").balance(&trade.offers, &r_inventories, who, ours);
+        let balance0  = match balance_ret {
+                None => 0.0,
+                Some(balance0) => balance0,
+            };
+        //tracing::info!("who : {} , balance0 {:?}", who, balance0);
+
+        let indicator_cash = self.localized_strings
+            .get_msg_ctx("hud-trade-indicator_cash", &i18n::fluent_args! {
+                "cash" => format!("{:.2}", balance0 * 10.0),
+            });
+
+        Text::new(&indicator_cash)
+            .down_from(state.ids.inv_alignment[who], 50.0)
+            .font_id(self.fonts.cyri.conrod_id)
+            .font_size(self.fonts.cyri.scale(20))
+            .color(Color::Rgba(1.0, 1.0, 1.0, 1.0))
+            .set(state.ids.indicators_cash[who], ui);
+
         let has_accepted = trade.accept_flags[who];
         let accept_indicator =
             self.localized_strings
@@ -269,7 +308,7 @@ impl<'a> Trade<'a> {
                     "playername" => &name,
                 });
         Text::new(&accept_indicator)
-            .down_from(state.ids.inv_alignment[who], 50.0)
+            .down_from(state.ids.inv_alignment[who], 80.0)
             .font_id(self.fonts.cyri.conrod_id)
             .font_size(self.fonts.cyri.scale(20))
             .color(Color::Rgba(
@@ -600,7 +639,7 @@ impl<'a> Trade<'a> {
             .hover_image(hover_img)
             .press_image(press_img)
             .image_color(accept_button_luminance)
-            .bottom_left_with_margins_on(state.ids.bg, 90.0, 47.0)
+            .bottom_left_with_margins_on(state.ids.bg, 120.0, 47.0)
             .label(&self.localized_strings.get_msg("hud-trade-accept"))
             .label_font_size(self.fonts.cyri.scale(14))
             .label_color(TEXT_COLOR)
@@ -825,6 +864,13 @@ impl<'a> Widget for Trade<'a> {
                 s.ids.offer_headers.resize(2, &mut ui.widget_id_generator());
             });
         }
+
+        if state.ids.indicators_cash.len() < 2 {
+            state.update(|s| {
+                s.ids.indicators_cash.resize(2, &mut ui.widget_id_generator());
+            });
+        }
+
         if state.ids.accept_indicators.len() < 2 {
             state.update(|s| {
                 s.ids

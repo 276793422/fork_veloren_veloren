@@ -579,7 +579,7 @@ impl<'a> Widget for ItemTooltip<'a> {
 
         // Amount
         let (subtitle_relative_id, spacing) = if self.item.amount().get() > 1 {
-            widget::Text::new(&format!("Amount: {}", self.item.amount().get()))
+            widget::Text::new(&format!("{}: {}", &self.localized_strings.get_msg("hud-trade-item_amount"), self.item.amount().get()))
                 .w(title_w)
                 .graphics_for(id)
                 .parent(id)

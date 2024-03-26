@@ -7,32 +7,37 @@ use crate::{
         BuffKind, BuffSource, PhysicsState,
     },
     error,
+    events::entity_creation::handle_create_npc,
+    pet::tame_pet,
     rtsim::RtSim,
     state_ext::StateExt,
-    sys::terrain::{NpcData, SAFE_ZONE_RADIUS},
+    sys::terrain::{NpcData, SpawnEntityData, SAFE_ZONE_RADIUS},
     Server, Settings, SpawnPoint,
 };
 use common::{
     combat,
     combat::{AttackSource, DamageContributor},
     comp::{
-        self, aura, buff,
+        self,
+        aura::{self, EnteredAuras},
+        buff,
         chat::{KillSource, KillType},
         inventory::item::{AbilityMap, MaterialStatManifest},
         item::flatten_counted_items,
         loot_owner::LootOwnerKind,
-        Alignment, Auras, Body, CharacterState, Energy, Group, Health, Inventory, Object, Player,
-        Poise, Pos, Presence, PresenceKind, SkillSet, Stats, BASE_ABILITY_LIMIT,
+        Alignment, Auras, Body, CharacterState, Energy, Group, Health, Inventory, Object,
+        PickupItem, Player, Poise, Pos, Presence, PresenceKind, SkillSet, Stats,
+        BASE_ABILITY_LIMIT,
     },
     consts::TELEPORTER_RADIUS,
     event::{
         AuraEvent, BonkEvent, BuffEvent, ChangeAbilityEvent, ChangeBodyEvent, ChangeStanceEvent,
-        ChatEvent, ComboChangeEvent, CreateItemDropEvent, CreateObjectEvent, DeleteEvent,
-        DestroyEvent, EmitExt, Emitter, EnergyChangeEvent, EntityAttackedHookEvent, EventBus,
-        ExplosionEvent, HealthChangeEvent, KnockbackEvent, LandOnGroundEvent, MakeAdminEvent,
-        ParryHookEvent, PoiseChangeEvent, RemoveLightEmitterEvent, RespawnEvent, SoundEvent,
-        StartTeleportingEvent, TeleportToEvent, TeleportToPositionEvent, TransformEvent,
-        UpdateMapMarkerEvent,
+        ChatEvent, ComboChangeEvent, CreateItemDropEvent, CreateNpcEvent, CreateObjectEvent,
+        DeleteEvent, DestroyEvent, EmitExt, Emitter, EnergyChangeEvent, EntityAttackedHookEvent,
+        EventBus, ExplosionEvent, HealthChangeEvent, KnockbackEvent, LandOnGroundEvent,
+        MakeAdminEvent, ParryHookEvent, PoiseChangeEvent, RemoveLightEmitterEvent, RespawnEvent,
+        SoundEvent, StartTeleportingEvent, TeleportToEvent, TeleportToPositionEvent,
+        TransformEvent, UpdateMapMarkerEvent,
     },
     event_emitters,
     generation::EntityInfo,
@@ -40,7 +45,7 @@ use common::{
     lottery::distribute_many,
     mounting::{Rider, VolumeRider},
     outcome::{HealthChangeInfo, Outcome},
-    resources::{Secs, Time},
+    resources::{ProgramTime, Secs, Time},
     rtsim::{Actor, RtSimEntity},
     spiral::Spiral2d,
     states::utils::StageSection,
@@ -286,6 +291,7 @@ pub struct DestroyEventData<'a> {
     msm: ReadExpect<'a, MaterialStatManifest>,
     ability_map: ReadExpect<'a, AbilityMap>,
     time: Read<'a, Time>,
+    program_time: ReadExpect<'a, ProgramTime>,
     world: ReadExpect<'a, Arc<World>>,
     index: ReadExpect<'a, world::IndexOwned>,
     areas_container: Read<'a, AreasContainer<NoDurabilityArea>>,
@@ -641,7 +647,7 @@ impl ServerEvent for DestroyEvent {
                                 vel: vel.copied().unwrap_or(comp::Vel(Vec3::zero())),
                                 // TODO: Random
                                 ori: comp::Ori::from(Dir::random_2d(&mut rng)),
-                                item,
+                                item: PickupItem::new(item, *data.program_time),
                                 loot_owner: if let Some(loot_owner) = loot_owner {
                                     debug!(
                                         "Assigned UID {loot_owner:?} as the winner for the loot \
@@ -941,6 +947,7 @@ impl ServerEvent for ExplosionEvent {
         ReadStorage<'a, comp::Combo>,
         ReadStorage<'a, Inventory>,
         ReadStorage<'a, Alignment>,
+        ReadStorage<'a, EnteredAuras>,
         ReadStorage<'a, comp::Buffs>,
         ReadStorage<'a, comp::Stats>,
         ReadStorage<'a, Health>,
@@ -971,6 +978,7 @@ impl ServerEvent for ExplosionEvent {
             combos,
             inventories,
             alignments,
+            entered_auras,
             buffs,
             stats,
             healths,
@@ -1270,17 +1278,27 @@ impl ServerEvent for ExplosionEvent {
                                 let target_dodging = char_state_b_maybe
                                     .and_then(|cs| cs.attack_immunities())
                                     .map_or(false, |i| i.explosions);
+                                let allow_friendly_fire =
+                                    owner_entity.is_some_and(|owner_entity| {
+                                        combat::allow_friendly_fire(
+                                            &entered_auras,
+                                            owner_entity,
+                                            entity_b,
+                                        )
+                                    });
                                 // PvP check
-                                let may_harm = combat::may_harm(
+                                let permit_pvp = combat::permit_pvp(
                                     &alignments,
                                     &players,
+                                    &entered_auras,
                                     &id_maps,
                                     owner_entity,
                                     entity_b,
                                 );
                                 let attack_options = combat::AttackOptions {
                                     target_dodging,
-                                    may_harm,
+                                    permit_pvp,
+                                    allow_friendly_fire,
                                     target_group,
                                     precision_mult: None,
                                 };
@@ -1318,8 +1336,9 @@ impl ServerEvent for ExplosionEvent {
                                 1.0 - distance_squared / ev.explosion.radius.powi(2)
                             };
 
-                            // Player check only accounts for PvP/PvE flag, but bombs
-                            // are intented to do friendly fire.
+                            // Player check only accounts for PvP/PvE flag (unless in a friendly
+                            // fire aura), but bombs are intented to do
+                            // friendly fire.
                             //
                             // What exactly is friendly fire is subject to discussion.
                             // As we probably want to minimize possibility of being dick
@@ -1327,10 +1346,11 @@ impl ServerEvent for ExplosionEvent {
                             // you want to harm yourself.
                             //
                             // This can be changed later.
-                            let may_harm = || {
-                                combat::may_harm(
+                            let permit_pvp = || {
+                                combat::permit_pvp(
                                     &alignments,
                                     &players,
+                                    &entered_auras,
                                     &id_maps,
                                     owner_entity,
                                     entity_b,
@@ -1341,7 +1361,7 @@ impl ServerEvent for ExplosionEvent {
 
                                 if is_alive {
                                     effect.modify_strength(strength);
-                                    if !effect.is_harm() || may_harm() {
+                                    if !effect.is_harm() || permit_pvp() {
                                         emit_effect_events(
                                             &mut emitters,
                                             *time,
@@ -1432,12 +1452,13 @@ impl ServerEvent for BonkEvent {
     type SystemData<'a> = (
         Write<'a, BlockChange>,
         ReadExpect<'a, TerrainGrid>,
+        ReadExpect<'a, ProgramTime>,
         Read<'a, EventBus<CreateObjectEvent>>,
     );
 
     fn handle(
         events: impl ExactSizeIterator<Item = Self>,
-        (mut block_change, terrain, create_object_events): Self::SystemData<'_>,
+        (mut block_change, terrain, program_time, create_object_events): Self::SystemData<'_>,
     ) {
         let mut create_object_emitter = create_object_events.emitter();
         for ev in events {
@@ -1474,7 +1495,7 @@ impl ServerEvent for BonkEvent {
                                         },
                                         _ => None,
                                     },
-                                    item: Some(item),
+                                    item: Some(comp::PickupItem::new(item, *program_time)),
                                     light_emitter: None,
                                     stats: None,
                                 });
@@ -1499,11 +1520,16 @@ impl ServerEvent for BonkEvent {
 }
 
 impl ServerEvent for AuraEvent {
-    type SystemData<'a> = WriteStorage<'a, Auras>;
+    type SystemData<'a> = (WriteStorage<'a, Auras>, WriteStorage<'a, EnteredAuras>);
 
-    fn handle(events: impl ExactSizeIterator<Item = Self>, mut auras: Self::SystemData<'_>) {
+    fn handle(
+        events: impl ExactSizeIterator<Item = Self>,
+        (mut auras, mut entered_auras): Self::SystemData<'_>,
+    ) {
         for ev in events {
-            if let Some(mut auras) = auras.get_mut(ev.entity) {
+            if let (Some(mut auras), Some(mut entered_auras)) =
+                (auras.get_mut(ev.entity), entered_auras.get_mut(ev.entity))
+            {
                 use aura::AuraChange;
                 match ev.aura_change {
                     AuraChange::Add(new_aura) => {
@@ -1512,6 +1538,24 @@ impl ServerEvent for AuraEvent {
                     AuraChange::RemoveByKey(keys) => {
                         for key in keys {
                             auras.remove(key);
+                        }
+                    },
+                    AuraChange::EnterAura(uid, key, variant) => {
+                        entered_auras
+                            .auras
+                            .entry(variant)
+                            .and_modify(|entered_auras| {
+                                entered_auras.insert((uid, key));
+                            })
+                            .or_insert_with(|| <_ as Into<_>>::into([(uid, key)]));
+                    },
+                    AuraChange::ExitAura(uid, key, variant) => {
+                        if let Some(entered_auras_variant) = entered_auras.auras.get_mut(&variant) {
+                            entered_auras_variant.remove(&(uid, key));
+
+                            if entered_auras_variant.is_empty() {
+                                entered_auras.auras.remove(&variant);
+                            }
                         }
                     },
                 }
@@ -2121,8 +2165,7 @@ pub fn handle_transform(
 #[derive(Debug)]
 pub enum TransformEntityError {
     EntityDead,
-    UnexpectedNpcWaypoint,
-    UnexpectedNpcTeleporter,
+    UnexpectedSpecialEntity,
     LoadingCharacter,
     EntityIsPlayer,
 }
@@ -2138,8 +2181,8 @@ pub fn transform_entity(
         .read_storage::<comp::Player>()
         .contains(entity);
 
-    match NpcData::from_entity_info(entity_info) {
-        NpcData::Data {
+    match SpawnEntityData::from_entity_info(entity_info) {
+        SpawnEntityData::Npc(NpcData {
             inventory,
             stats,
             skill_set,
@@ -2151,7 +2194,8 @@ pub fn transform_entity(
             loot,
             alignment: _,
             pos: _,
-        } => {
+            pets,
+        }) => {
             fn set_or_remove_component<C: specs::Component>(
                 server: &mut Server,
                 entity: EcsEntity,
@@ -2244,12 +2288,27 @@ pub fn transform_entity(
                 set_or_remove_component(server, entity, agent)?;
                 set_or_remove_component(server, entity, loot.to_items().map(comp::ItemDrops))?;
             }
+
+            // Spawn pets
+            let position = server.state.read_component_copied::<comp::Pos>(entity);
+            if let Some(pos) = position {
+                for (pet, offset) in pets
+                    .into_iter()
+                    .map(|(pet, offset)| (pet.to_npc_builder().0, offset))
+                {
+                    let pet_entity = handle_create_npc(server, CreateNpcEvent {
+                        pos: comp::Pos(pos.0 + offset),
+                        ori: comp::Ori::from_unnormalized_vec(offset).unwrap_or_default(),
+                        npc: pet,
+                        rider: None,
+                    });
+
+                    tame_pet(server.state.ecs(), pet_entity, entity);
+                }
+            }
         },
-        NpcData::Waypoint(_) => {
-            return Err(TransformEntityError::UnexpectedNpcWaypoint);
-        },
-        NpcData::Teleporter(_, _) => {
-            return Err(TransformEntityError::UnexpectedNpcTeleporter);
+        SpawnEntityData::Special(_, _) => {
+            return Err(TransformEntityError::UnexpectedSpecialEntity);
         },
     }
 

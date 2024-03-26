@@ -6,10 +6,9 @@ use crate::{
         agent::Sound,
         dialogue::Subject,
         invite::{InviteKind, InviteResponse},
-        misc::PortalData,
         DisconnectReason, LootOwner, Ori, Pos, UnresolvedChatMsg, Vel,
     },
-    generation::EntityInfo,
+    generation::{EntityInfo, SpecialEntity},
     lottery::LootSpec,
     mounting::VolumePos,
     outcome::Outcome,
@@ -27,6 +26,8 @@ use uuid::Uuid;
 use vek::*;
 
 pub type SiteId = u64;
+/// Plugin identifier (sha256)
+pub type PluginHash = [u8; 32];
 
 pub enum LocalEvent {
     /// Applies upward force to entity's `Vel`
@@ -59,6 +60,7 @@ pub struct NpcBuilder {
     pub scale: comp::Scale,
     pub anchor: Option<comp::Anchor>,
     pub loot: LootSpec<String>,
+    pub pets: Vec<(NpcBuilder, Vec3<f32>)>,
     pub rtsim_entity: Option<RtSimEntity>,
     pub projectile: Option<comp::Projectile>,
 }
@@ -79,6 +81,7 @@ impl NpcBuilder {
             loot: LootSpec::Nothing,
             rtsim_entity: None,
             projectile: None,
+            pets: Vec::new(),
         }
     }
 
@@ -131,6 +134,11 @@ impl NpcBuilder {
         self.loot = loot;
         self
     }
+
+    pub fn with_pets(mut self, pets: Vec<(NpcBuilder, Vec3<f32>)>) -> Self {
+        self.pets = pets;
+        self
+    }
 }
 
 pub struct ClientConnectedEvent {
@@ -143,8 +151,10 @@ pub struct ChatEvent(pub UnresolvedChatMsg);
 pub struct CommandEvent(pub EcsEntity, pub String, pub Vec<String>);
 
 // Entity Creation
-pub struct CreateWaypointEvent(pub Vec3<f32>);
-pub struct CreateTeleporterEvent(pub Vec3<f32>, pub PortalData);
+pub struct CreateSpecialEntityEvent {
+    pub pos: Vec3<f32>,
+    pub entity: SpecialEntity,
+}
 
 pub struct CreateNpcEvent {
     pub pos: Pos,
@@ -165,7 +175,7 @@ pub struct CreateItemDropEvent {
     pub pos: Pos,
     pub vel: Vel,
     pub ori: Ori,
-    pub item: comp::Item,
+    pub item: comp::PickupItem,
     pub loot_owner: Option<LootOwner>,
 }
 pub struct CreateObjectEvent {
@@ -173,7 +183,7 @@ pub struct CreateObjectEvent {
     pub vel: Vel,
     pub body: comp::object::Body,
     pub object: Option<comp::Object>,
-    pub item: Option<comp::Item>,
+    pub item: Option<comp::PickupItem>,
     pub light_emitter: Option<comp::LightEmitter>,
     pub stats: Option<comp::Stats>,
 }
@@ -296,6 +306,7 @@ pub struct ExitIngameEvent {
     pub entity: EcsEntity,
 }
 
+#[derive(Debug)]
 pub struct AuraEvent {
     pub entity: EcsEntity,
     pub aura_change: comp::AuraChange,
@@ -417,6 +428,10 @@ pub struct ToggleSpriteLightEvent {
     pub pos: Vec3<i32>,
     pub enable: bool,
 }
+pub struct RequestPluginsEvent {
+    pub entity: EcsEntity,
+    pub plugins: Vec<PluginHash>,
+}
 
 pub struct EventBus<E> {
     queue: Mutex<VecDeque<E>>,
@@ -484,8 +499,7 @@ pub fn register_event_busses(ecs: &mut World) {
     ecs.insert(EventBus::<ClientDisconnectWithoutPersistenceEvent>::default());
     ecs.insert(EventBus::<ChatEvent>::default());
     ecs.insert(EventBus::<CommandEvent>::default());
-    ecs.insert(EventBus::<CreateWaypointEvent>::default());
-    ecs.insert(EventBus::<CreateTeleporterEvent>::default());
+    ecs.insert(EventBus::<CreateSpecialEntityEvent>::default());
     ecs.insert(EventBus::<CreateNpcEvent>::default());
     ecs.insert(EventBus::<CreateShipEvent>::default());
     ecs.insert(EventBus::<CreateItemDropEvent>::default());
@@ -541,6 +555,7 @@ pub fn register_event_busses(ecs: &mut World) {
     ecs.insert(EventBus::<StartTeleportingEvent>::default());
     ecs.insert(EventBus::<ToggleSpriteLightEvent>::default());
     ecs.insert(EventBus::<TransformEvent>::default());
+    ecs.insert(EventBus::<RequestPluginsEvent>::default());
 }
 
 /// Define ecs read data for event busses. And a way to convert them all to

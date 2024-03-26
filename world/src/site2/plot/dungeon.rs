@@ -823,7 +823,7 @@ fn boss_fallback(dynamic_rng: &mut impl Rng, tile_wcenter: Vec3<i32>) -> Vec<Ent
 
 fn mini_boss_2(dynamic_rng: &mut impl Rng, tile_wcenter: Vec3<i32>) -> Vec<EntityInfo> {
     let mut entities = Vec::new();
-    entities.resize_with(6, || {
+    entities.resize_with(dynamic_rng.gen_range(1..=2), || {
         EntityInfo::at(tile_wcenter.map(|e| e as f32)).with_asset_expect(
             "common.entity.dungeon.sahagin.hakulaq",
             dynamic_rng,
@@ -854,13 +854,6 @@ fn mini_boss_5(dynamic_rng: &mut impl Rng, tile_wcenter: Vec3<i32>) -> Vec<Entit
                     None,
                 ),
             );
-            entities.resize_with(entities.len() + 4, || {
-                EntityInfo::at(tile_wcenter.map(|e| e as f32)).with_asset_expect(
-                    "common.entity.dungeon.cultist.hound",
-                    dynamic_rng,
-                    None,
-                )
-            });
         },
         1 => {
             entities.resize_with(2, || {
@@ -1338,8 +1331,8 @@ impl Floor {
                             lights = painter.prim(Primitive::translate(lights, 3 * Vec3::unit_z()));
                             pillar = painter.prim(Primitive::union(pillar, base));
                         }
-                        // Specifically don't include pillars in Minotaur arena
-                        if !(room.kind == RoomKind::Boss && self.difficulty == 4) {
+                        // Specifically don't include pillars in Sahagin and Myrmidon dungeons
+                        if !(self.difficulty == 2 || self.difficulty == 4) {
                             pillars.push((tile_center, pillar, lights));
                         }
                     }

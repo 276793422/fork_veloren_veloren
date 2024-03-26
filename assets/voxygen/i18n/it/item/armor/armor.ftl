@@ -266,7 +266,7 @@ armor-misc-head-gnarling_mask = Maschera del capo tribù
     .desc = Puzza di legno bruciato.
 
 armor-misc-head-helmet = Elmo
-    .desc = Un semplice elmo.
+    .desc = {""}
 
 armor-misc-head-hog_hood = Cappuccio di maiale
     .desc = Assumi l'aspetto di un grande maiale ora abbattuto, così potrai onorarne il sacrificio.
@@ -701,7 +701,7 @@ armor-cultist-hand = Guanti del cultista
     .desc = Abito cerimoniale usato dai membri.
 
 armor-cultist-necklace = Amuleto del cultista
-    .desc = Puoi ancora sentire la presenza dello scorticatore di anime in questo amuleto...
+    .desc = Puoi ancora percepire la presenza di un illithid in questo amuleto...
 
 armor-cultist-pants = Gonna del cultista
     .desc = Abito cerimoniale usato dai membri.

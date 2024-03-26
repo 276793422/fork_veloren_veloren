@@ -11,7 +11,7 @@ object-potion_big = Pozione grande
     .desc = Medicina preziosa, crea la più grande fiaschetta rigenerativa finora.
 
 object-potion_combustion = Pozione di combustione
-    .desc = Impreziosisci il tuo alleato, sfrutta il suo potere per bruciare i tuoi nemici.
+    .desc = Fa ardere chi lo usa.
 
 object-potion_med = Pozione media
     .desc = Un'innovativa invenzione di un erborista, migliore dei suoi predecessori più piccoli.

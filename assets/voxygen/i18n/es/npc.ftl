@@ -7,7 +7,7 @@ npc-speech-villager_decline_trade =
 npc-speech-merchant_advertisement =
     .a0 = ¿Te interesaría comerciar conmigo?
     .a1 = ¿Querrías comerciar conmigo?
-    .a2 = Tengo un montón de artículos. ¿Te gustaría echar un ojo?
+    .a2 = Tengo un montón de artículos. ¿Te gustaría echarles un ojo?
 npc-speech-merchant_busy =
     .a0 = Ten paciencia, solo soy una persona.
     .a1 = Un momento, déjame acabar.
@@ -19,24 +19,24 @@ npc-speech-merchant_trade_declined =
     .a0 = Quizás en otra ocasión, ¡ten un buen día!
     .a1 = Vaya, ¡supongo que en otra ocasión!
 npc-speech-villager_cultist_alarm =
-    .a0 = ¡Cuidado! ¡Hay cultistas sueltos!
-    .a1 = ¡A las armas! ¡Los cultistas nos atacan!
-    .a2 = ¡¿Cómo se atreven los cultistas a atacar esta aldea?!
-    .a3 = ¡Muerte a los cultistas!
-    .a4 = ¡Aquí no toleramos a los cultistas!
-    .a5 = ¡Cultista, asesino!
-    .a6 = ¡Prueba el filo de mi espada, sucio cultista!
-    .a7 = ¡Nada podrá limpiar la sangre de tus manos, cultista!
-    .a8 = ¡Por las barbas del Minotauro! ¡Un cultista entre nosotros!
-    .a9 = ¡Esos malvados cultistas serán aniquilados!
-    .a10 = ¡Este cultista es mío!
-    .a11 = ¡Prepárate para conocer a tu creador, sucio cultista!
-    .a12 = ¡Veo un cultista! ¡Atrapadlo!
-    .a13 = ¡Veo un cultista! ¡Atacadlo!
-    .a14 = ¡Veo un cultista! ¡No dejéis que escape!
-    .a15 = ¿Le gustaría al más honorable de los cultistas un poco de MUERTE?
-    .a16 = ¡Nunca perdonamos! ¡Nunca olvidamos! ¡Muere, cultista!
-    .a17 = ¡Muere, cultista!
+    .a0 = ¡Cuidado! ¡Hay sectarios sueltos!
+    .a1 = ¡A las armas! ¡Los sectarios nos atacan!
+    .a2 = ¡¿Cómo se atreven los sectarios a atacar esta aldea?!
+    .a3 = ¡Muerte a los sectarios!
+    .a4 = ¡Aquí no toleramos a los sectarios!
+    .a5 = ¡Sectario asesino!
+    .a6 = ¡Prueba el filo de mi espada, sucio sectario!
+    .a7 = ¡Nada podrá limpiar la sangre de tus manos, sectario!
+    .a8 = ¡Por las barbas del Minotauro! ¡Un sectario entre nosotros!
+    .a9 = ¡Esos malvados sectarios serán aniquilados!
+    .a10 = ¡Este sectario es mío!
+    .a11 = ¡Prepárate para conocer a tu creador, sucio sectario!
+    .a12 = ¡Veo un sectario! ¡Atrapadlo!
+    .a13 = ¡Veo un sectario! ¡Atacadlo!
+    .a14 = ¡Veo un sectario! ¡No dejéis que escape!
+    .a15 = ¿Le gustaría al más honorable de los sectarios un poco de MUERTE?
+    .a16 = ¡Nunca perdonamos! ¡Nunca olvidamos! ¡Muere, sectario!
+    .a17 = ¡Muere, sectario!
     .a18 = ¡Tu reinado de terror llegará a su fin!
     .a19 = ¡Pagarás por todo lo que has hecho!
     .a20 = Por aquí no tratamos con amabilidad a los de tu especie.
@@ -274,3 +274,28 @@ npc-speech-dir_south = sur
 npc-speech-dir_south_west = suroeste
 npc-speech-dir_west = oeste
 npc-speech-dir_north_west = noroeste
+# Distance hints, used ONLY in npc-speech-tell* above
+npc-speech-dist_very_far = muy lejos
+# Distance hints, used ONLY in npc-speech-tell* above
+npc-speech-dist_far = lejos
+# Distance hints, used ONLY in npc-speech-tell* above
+npc-speech-dist_ahead = algo lejos
+# Distance hints, used ONLY in npc-speech-tell* above
+npc-speech-dist_near = por aquí cerca
+# Distance hints, used ONLY in npc-speech-tell* above
+npc-speech-dist_near_to = muy cerca
+# NPC proposals
+npc-speech-arena = ¡Vamos a sentarnos allí!
+# NPC reactions
+npc-speech-welcome-aboard =
+    .a0 = ¡Bienvenido a bordo!
+    .a1 = Puedo ver tu ticket... ¡era broma! Es gratis.
+    .a2 = ¡Que tenga un buen viaje!
+# NPC monster hints
+# Available variables:
+# - $dir references npc-speech-dir-* variables below
+# - $dist references npc-speech-dist-* variables below
+# - $body references body-npc-speech-* variables in `body` component
+npc-speech-tell_monster =
+    .a0 = Dicen que hay { $body } hacia el { $dir }, { $dist }...
+    .a1 = ¿Te crees una persona dura de pelar? Hay { $body } hacia el { $dir }.

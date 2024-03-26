@@ -20,9 +20,7 @@ use common::{
         self,
         item::{ItemKind, MaterialStatManifest},
         misc::PortalData,
-        object,
-        skills::{GeneralSkill, Skill},
-        ChatType, Content, Group, Inventory, Item, LootOwner, Object, Player, Poise, Presence,
+        object, ChatType, Content, Group, Inventory, LootOwner, Object, Player, Poise, Presence,
         PresenceKind, BASE_ABILITY_LIMIT,
     },
     effect::Effect,
@@ -65,6 +63,8 @@ pub trait StateExt {
         inventory: Inventory,
         body: comp::Body,
     ) -> EcsEntityBuilder;
+    /// Create an entity with only a position
+    fn create_empty(&mut self, pos: comp::Pos) -> EcsEntityBuilder;
     /// Build a static object entity
     fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder;
     /// Create an item drop or merge the item with an existing drop, if a
@@ -74,7 +74,7 @@ pub trait StateExt {
         pos: comp::Pos,
         ori: comp::Ori,
         vel: comp::Vel,
-        item: Item,
+        item: comp::PickupItem,
         loot_owner: Option<LootOwner>,
     ) -> Option<EcsEntity>;
     fn create_ship<F: FnOnce(comp::ship::Body) -> comp::Collider>(
@@ -299,12 +299,7 @@ impl StateExt for State {
             .with(body.collider())
             .with(comp::Controller::default())
             .with(body)
-            .with(comp::Energy::new(
-                body,
-                skill_set
-                    .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
-                    .unwrap_or(0),
-            ))
+            .with(comp::Energy::new(body))
             .with(stats)
             .with(if body.is_humanoid() {
                 comp::ActiveAbilities::default_limited(BASE_ABILITY_LIMIT)
@@ -321,16 +316,21 @@ impl StateExt for State {
             .with(comp::Buffs::default())
             .with(comp::Combo::default())
             .with(comp::Auras::default())
+            .with(comp::EnteredAuras::default())
             .with(comp::Stance::default())
     }
 
-    fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder {
-        let body = comp::Body::Object(object);
+    fn create_empty(&mut self, pos: comp::Pos) -> EcsEntityBuilder {
         self.ecs_mut()
             .create_entity_synced()
             .with(pos)
             .with(comp::Vel(Vec3::zero()))
             .with(comp::Ori::default())
+    }
+
+    fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder {
+        let body = comp::Body::Object(object);
+        self.create_empty(pos)
             .with(body.mass())
             .with(body.density())
             .with(body.collider())
@@ -342,54 +342,44 @@ impl StateExt for State {
         pos: comp::Pos,
         ori: comp::Ori,
         vel: comp::Vel,
-        item: Item,
+        world_item: comp::PickupItem,
         loot_owner: Option<LootOwner>,
     ) -> Option<EcsEntity> {
+        // Attempt merging with any nearby entities if possible
         {
-            const MAX_MERGE_DIST: f32 = 1.5;
+            use crate::sys::item::get_nearby_mergeable_items;
 
-            // First, try to identify possible candidates for item merging
-            // We limit our search to just a few blocks and we prioritise merging with the
-            // closest
             let positions = self.ecs().read_storage::<comp::Pos>();
             let loot_owners = self.ecs().read_storage::<LootOwner>();
-            let mut items = self.ecs().write_storage::<Item>();
-            let mut nearby_items = self
-                .ecs()
-                .read_resource::<common::CachedSpatialGrid>()
-                .0
-                .in_circle_aabr(pos.0.xy(), MAX_MERGE_DIST)
-                .filter(|entity| items.contains(*entity))
-                .filter_map(|entity| {
-                    Some((entity, positions.get(entity)?.0.distance_squared(pos.0)))
-                })
-                .filter(|(_, dist_sqrd)| *dist_sqrd < MAX_MERGE_DIST.powi(2))
-                .collect::<Vec<_>>();
-            nearby_items.sort_by_key(|(_, dist_sqrd)| (dist_sqrd * 1000.0) as i32);
-            for (nearby, _) in nearby_items {
-                // Only merge if the loot owner is the same
-                if loot_owners.get(nearby).map(|lo| lo.owner()) == loot_owner.map(|lo| lo.owner())
-                    && items
-                        .get(nearby)
-                        .map_or(false, |nearby_item| nearby_item.can_merge(&item))
-                {
-                    // Merging can occur! Perform the merge:
-                    items
-                        .get_mut(nearby)
-                        .expect("we know that the item exists")
-                        .try_merge(item)
-                        .expect("`try_merge` should succeed because `can_merge` returned `true`");
-                    return None;
-                }
+            let mut items = self.ecs().write_storage::<comp::PickupItem>();
+            let entities = self.ecs().entities();
+            let spatial_grid = self.ecs().read_resource();
+
+            let nearby_items = get_nearby_mergeable_items(
+                &world_item,
+                &pos,
+                loot_owner.as_ref(),
+                (&entities, &items, &positions, &loot_owners, &spatial_grid),
+            );
+
+            // Merge the nearest item if possible, skip to creating a drop otherwise
+            if let Some((mergeable_item, _)) =
+                nearby_items.min_by_key(|(_, dist)| (dist * 1000.0) as i32)
+            {
+                items
+                    .get_mut(mergeable_item)
+                    .expect("we know that the item exists")
+                    .try_merge(world_item)
+                    .expect("`try_merge` should succeed because `can_merge` returned `true`");
+                return None;
             }
-            // Only if merging items fails do we give up and create a new item
         }
 
         let spawned_at = *self.ecs().read_resource::<Time>();
 
-        let item_drop = comp::item_drop::Body::from(&item);
+        let item_drop = comp::item_drop::Body::from(world_item.item());
         let body = comp::Body::ItemDrop(item_drop);
-        let light_emitter = match &*item.kind() {
+        let light_emitter = match &*world_item.item().kind() {
             ItemKind::Lantern(lantern) => Some(comp::LightEmitter {
                 col: lantern.color(),
                 strength: lantern.strength(),
@@ -401,7 +391,7 @@ impl StateExt for State {
         Some(
             self.ecs_mut()
                 .create_entity_synced()
-                .with(item)
+                .with(world_item)
                 .with(pos)
                 .with(ori)
                 .with(vel)
@@ -445,7 +435,7 @@ impl StateExt for State {
             .with(comp::CharacterActivity::default())
             // TODO: some of these are required in order for the character_behavior system to
             // recognize a possesed airship; that system should be refactored to use `.maybe()`
-            .with(comp::Energy::new(ship.into(), 0))
+            .with(comp::Energy::new(ship.into()))
             .with(comp::Stats::new("Airship".to_string(), body))
             .with(comp::SkillSet::default())
             .with(comp::ActiveAbilities::default())
@@ -645,6 +635,7 @@ impl StateExt for State {
             self.write_component_ignore_entity_dead(entity, comp::Alignment::Owned(player_uid));
             self.write_component_ignore_entity_dead(entity, comp::Buffs::default());
             self.write_component_ignore_entity_dead(entity, comp::Auras::default());
+            self.write_component_ignore_entity_dead(entity, comp::EnteredAuras::default());
             self.write_component_ignore_entity_dead(entity, comp::Combo::default());
             self.write_component_ignore_entity_dead(entity, comp::Stance::default());
 
@@ -744,16 +735,8 @@ impl StateExt for State {
             self.write_component_ignore_entity_dead(entity, body);
             self.write_component_ignore_entity_dead(entity, body.mass());
             self.write_component_ignore_entity_dead(entity, body.density());
-            let (health_level, energy_level) = (
-                skill_set
-                    .skill_level(Skill::General(GeneralSkill::HealthIncrease))
-                    .unwrap_or(0),
-                skill_set
-                    .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
-                    .unwrap_or(0),
-            );
-            self.write_component_ignore_entity_dead(entity, comp::Health::new(body, health_level));
-            self.write_component_ignore_entity_dead(entity, comp::Energy::new(body, energy_level));
+            self.write_component_ignore_entity_dead(entity, comp::Health::new(body));
+            self.write_component_ignore_entity_dead(entity, comp::Energy::new(body));
             self.write_component_ignore_entity_dead(entity, Poise::new(body));
             self.write_component_ignore_entity_dead(entity, stats);
             self.write_component_ignore_entity_dead(entity, active_abilities);
@@ -788,9 +771,6 @@ impl StateExt for State {
                     pets.len(),
                     player_pos
                 );
-                // This is the same as wild creatures naturally spawned in the world
-                const DEFAULT_PET_HEALTH_LEVEL: u16 = 0;
-
                 let mut rng = rand::thread_rng();
 
                 for (pet, body, stats) in pets {
@@ -801,7 +781,7 @@ impl StateExt for State {
                             ori,
                             stats,
                             comp::SkillSet::default(),
-                            Some(comp::Health::new(body, DEFAULT_PET_HEALTH_LEVEL)),
+                            Some(comp::Health::new(body)),
                             Poise::new(body),
                             Inventory::with_loadout(
                                 LoadoutBuilder::from_default(&body).build(),

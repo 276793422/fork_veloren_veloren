@@ -89,7 +89,7 @@ sprite-crafting_ing-hide-tough_hide = Pelle resistente
     .desc = Una pelle relativamente resistente e ruvida. Puoi ricavarne del cuoio.
 
 sprite-crafting_ing-animal_misc-claw = Artiglio di oredatore
-    .desc = 
+    .desc =
         L'agile artiglio di un feroce predatore.
         
         Può essere usato per creare armi veloci ed agili.
@@ -101,7 +101,7 @@ sprite-crafting_ing-animal_misc-grim_eyeball = Occhio sinistro
     .desc = Scaglia uno sguardo pietrificante.
 
 sprite-crafting_ing-animal_misc-large_horn = Corno grande
-    .desc = 
+    .desc =
         Un grande corno di una temibile bestia.
         
         Le armi fatte con questo hanno effetti potenziati.
@@ -113,7 +113,7 @@ sprite-crafting_ing-animal_misc-phoenix_feather = Piuma di fenice
     .desc = Si dice che abbia proprietà magiche.
 
 sprite-crafting_ing-animal_misc-sharp_fang = Zanna affilata
-    .desc = 
+    .desc =
         Dente affilato come una lama da un feroce animale.
         
         Le armi fatte con questo hanno effetti duraturi più potenti.
@@ -137,7 +137,7 @@ sprite-crafting_ing-leather-thick_leather = Pelle spessa
     .desc = Robusta e resistente.
 
 sprite-crafting_ing-cloth-cloth_strips = Strisce di stoffa
-    .desc = Piccole e morbide, ma utili.
+    .desc = Piccolo e morbido, ma utile.
 
 sprite-crafting_ing-cloth-cotton = Cotone
     .desc = Facile da lavorare e multifunzionale.
@@ -188,7 +188,7 @@ object-v-coin = Monete
     .desc = Monete preziose, possono essere scambiate per beni e servizi.
 
 object-collar = Collare
-    .desc = Addomestica animali selvatici neutri entro 5 blocchi
+    .desc = Addomestica animali selvatici neutrali entro 5 blocchi.
 
 object-training_dummy = Manichino da allenamento
     .desc = Il suo nome è Guglielmo, colpiscilo a volontà.
@@ -209,14 +209,14 @@ object-honey = Miele
     .desc = Rubato da un alveare. Sicuramente le api non saranno contente di questo!
 
 object-glowing_remains = Resti Luminosi
-    .desc = 
+    .desc =
         Depredato da un essere malvagio.
         
         Con un po' di lavoro aggiuntivo può sicuramente essere
         riportato al suo antico splendore...
 
 object-elegant_crest = Stemma elegante
-    .desc = 
+    .desc =
         Piumaggio luminoso un tempo appartenente a una varipinta creatura.
         
         Può essere usato per creare armi rapide ed energetiche.
@@ -225,7 +225,7 @@ object-ice_shard = Frammento gelido
     .desc = Depredato da una creatura ghiacciata.
 
 object-long_tusk = Zanna lunga
-    .desc = 
+    .desc =
         Un impressionante lunga zanna di bestia orgogliosa.
         
         Può essere usato per creare armi efficienti a lungo raggio.
@@ -234,7 +234,7 @@ object-raptor_feather = Piuma di rapace
     .desc = Una grande piuma colorata di un rapace.
 
 object-strong_pincer = Chela forte
-    .desc = 
+    .desc =
         Una poderosa pinza da una creatura dal guscio duro.
         
         Ha effetti di potenziamento quando si creano armi.
@@ -270,19 +270,19 @@ sprite-velorite-velorite = Frammento di velorite
     .desc = Piccole rune scintillano sulla sua superficie, anche se non sai cosa significhino.
 
 sprite-mineral-ingot-bloodsteel = Lingotto di pietrasangue
-    .desc = 
+    .desc =
         Una lega di pietrasangue e ferro, dal colore rosso scuro.
         
         Può essere utilizzato nella creazione di armi metalliche.
 
 sprite-mineral-ingot-bronze = Lingotto di bronzo
-    .desc = 
+    .desc =
         Una resistente lega ottenuta combinando rame e stagno.
         
         Può essere utilizzata per la creazione di armi metalliche.
 
 sprite-mineral-ingot-cobalt =  Lingotto di cobalto
-    .desc = 
+    .desc =
         Un lingotto di un blu sorprendente.
         
         Può essere utilizzato per forgiare armi metalliche.
@@ -294,13 +294,13 @@ sprite-mineral-ingot-gold = Lingotto d'oro
     .desc = Un lingotto fatto di oro metallico raffinato.
 
 sprite-mineral-ingot-iron = Lingotto di ferro
-    .desc = 
+    .desc =
         Un metallo incredibilmente comune.
         
         Può essere utilizzato per forgiare armi metalliche.
 
 sprite-mineral-ingot-orichalcum = Lingotto di oricalco
-    .desc = 
+    .desc =
         Un lingotto fatto di oricalco raffinato.
         
         Può essere utilizzato per forgiare armi metalliche.
@@ -309,7 +309,7 @@ sprite-mineral-ingot-silver = Lingotto d'argento
     .desc = Un lingotto fatto di argento metallico raffinato.
 
 sprite-mineral-ingot-steel = Lingotto d'acciaio
-    .desc = 
+    .desc =
         Un'lega di ferro e carbone che è molto più resistente dei suoi componenti.
         
         Può essere utilizzato per forgiare armi metalliche.

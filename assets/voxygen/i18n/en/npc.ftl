@@ -10,13 +10,12 @@ npc-speech-villager_open =
     .a4 = I left some cheese with my sibling. Now I don't know if it exists or not. I call it Schrödinger's cheese.
     .a5 = Have you ever caught a firefly?
     .a6 = They say shiny gems of all kinds can be found in caves.
-    .a7 = I just can't understand where those Sauroks keep coming from.
+    .a7 = I just can't understand where those sauroks keep coming from.
 npc-speech-villager_adventurous =
     .a0 = I hope to make my own glider someday.
     .a1 = I'd like to go spelunking in a cave when I'm stronger.
 npc-speech-villager_closed =
     .a0 = You're not from around here are you?
-    .a1 = Don't you think our village is the best?
     .a2 = They say mushrooms are good for your health. Never eat them myself.
     .a3 = To be, or not to be? I think I'll be a farmer.
 npc-speech-villager_conscientious =
@@ -76,7 +75,7 @@ npc-speech-villager_busy =
 npc-speech-merchant_advertisement =
     .a0 = Can I interest you in a trade?
     .a1 = Do you want to trade with me?
-    .a2 = I have plenty of goods, Do you want to take a look?
+    .a2 = I have plenty of goods. Do you want to take a look?
 npc-speech-merchant_busy =
     .a0 = Please wait, I'm only one person.
     .a1 = Just a moment, let me finish.
@@ -264,6 +263,11 @@ npc-speech-tell_site =
     .a2 = If you travel { $dist } { $dir }, you can get to { $site }.
     .a3 = { $dir } you'll find { $site }, it's { $dist }.
 
+npc-speech-site =
+    .a0 = Don't you think our village is the best?
+    .a1 = Welcome to { $site } !
+    .a2 = { $site } is a pleasant village to live in.
+
 ## NPC monster hints
 ## Available variables:
 ## - $dir references npc-speech-dir-* variables below
@@ -271,7 +275,7 @@ npc-speech-tell_site =
 ## - $body references body-npc-speech-* variables in `body` component
 
 npc-speech-tell_monster =
-    .a0 = They say there's { $body } { $dir }, { $dist } ...
+    .a0 = They say there's { $body } { $dir }, { $dist }...
     .a1 = You think you're tough? There's { $body } { $dir }.
 
 ## Direction hints, used ONLY in npc-speech-tell* above
@@ -315,3 +319,7 @@ npc-speech-welcome-aboard =
     .a0 = Welcome aboard!
     .a1 = Can I see your ticket... just kidding it's free!
     .a2 = Have a nice ride!
+npc-speech-night =
+    .a0 = Lanterns are handy for getting around at night!
+    .a1 = I hope we are alone in the dark...
+    .a2 = Boo!

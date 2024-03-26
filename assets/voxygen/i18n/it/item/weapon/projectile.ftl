@@ -2,7 +2,7 @@ object-bomb = Bomba
     .desc = Un dispositivo altamente esplosivo, adorato dai demolitori!
 
 weapon-projectile-fireworks_blue = Fuoco d'artificio blu
-    .desc = Consigliata distanza di sicurezza: 42 blocchi
+    .desc = Distanza consigliata: 42 blocchi.
 
 weapon-projectile-fireworks_green = Fuoco d'artificio verde
     .desc = Attenzione agli alberi.

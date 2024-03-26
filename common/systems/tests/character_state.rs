@@ -2,8 +2,8 @@
 mod tests {
     use common::{
         comp::{
-            item::MaterialStatManifest, skills::GeneralSkill, tool::AbilityMap, CharacterActivity,
-            CharacterState, Controller, Energy, Ori, PhysicsState, Poise, Pos, Skill, Stats, Vel,
+            item::MaterialStatManifest, tool::AbilityMap, CharacterActivity, CharacterState,
+            Controller, Energy, Ori, PhysicsState, Poise, Pos, Stats, Vel,
         },
         resources::{DeltaTime, GameMode, Time},
         shared_server_config::ServerConstants,
@@ -37,6 +37,7 @@ mod tests {
             |dispatch_builder| {
                 dispatch::<character_behavior::Sys>(dispatch_builder, &[]);
             },
+            common_state::plugin::PluginMgr::default(),
         );
         let msm = MaterialStatManifest::load().cloned();
         state.ecs_mut().insert(msm);
@@ -63,12 +64,7 @@ mod tests {
             .with(body.mass())
             .with(body.density())
             .with(body)
-            .with(Energy::new(
-                body,
-                skill_set
-                    .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
-                    .unwrap_or(0),
-            ))
+            .with(Energy::new(body))
             .with(Controller::default())
             .with(Poise::new(body))
             .with(skill_set)

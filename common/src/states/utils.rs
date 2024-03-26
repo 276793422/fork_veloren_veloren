@@ -654,7 +654,7 @@ pub fn handle_orientation(
     // else the current horizontal movement direction is used
     let target_ori = if let Some(dir_override) = dir_override {
         dir_override.into()
-    } else if is_strafing(data, update) || update.character.is_attack() {
+    } else if is_strafing(data, update) || update.character.should_follow_look() {
         data.inputs
             .look_dir
             .to_horizontal()
@@ -1328,6 +1328,30 @@ pub fn handle_input(
         },
         InputKind::Fly => {},
     }
+}
+
+// NOTE: Quality of Life hack
+//
+// Uses glider ability if has any, otherwise fallback
+pub fn handle_glider_input_or(
+    data: &JoinData<'_>,
+    update: &mut StateUpdate,
+    output_events: &mut OutputEvents,
+    fallback_fn: fn(&JoinData<'_>, &mut StateUpdate),
+) {
+    if data
+        .inventory
+        .and_then(|inv| inv.equipped(EquipSlot::Glider))
+        .and_then(|glider| glider.item_config())
+        .is_none()
+    {
+        fallback_fn(data, update);
+        return;
+    };
+
+    if let Some(input) = data.controller.queued_inputs.keys().next() {
+        handle_ability(data, update, output_events, *input);
+    };
 }
 
 pub fn attempt_input(

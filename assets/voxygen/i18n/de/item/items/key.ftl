@@ -1,11 +1,11 @@
 object-lockpick = Gewöhnlicher Dietrich
-    .desc = Wird zum Öffnen von Schlössern verwendet. Zerbricht nach Gebrauch.
+    .desc = Wird zum Knacken von Schlössern verwendet. Zerbricht bei Gebrauch.
 object-key-bone = Knochenschlüssel
     .desc = Wird zum Öffnen knöcherne Schlösser verwendet. Zerbricht nach Gebrauch.
 object-key-glass = Glasschlüssel
     .desc = Wird zum Öffnen von Glasbarrieren verwendet. Zerbricht nach Gebrauch.
 object-key-rusty = Rostiger Turmschlüssel
-    .desc = Riecht nach Magie mit ein wenig … Käse?
+    .desc = Riecht nach Magie mit ein wenig ... Käse?
 object-key-quarry-ancient = Uralter Schlüssel
     .desc = Falls du Glück hast, funktioniert er ein weiteres Mal, bevor er zerbricht.
 object-key-quarry-overseer = Aufseher-Schlüssel

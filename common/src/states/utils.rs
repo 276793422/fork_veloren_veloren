@@ -3,7 +3,7 @@ use crate::{
     comp::{
         ability::{AbilityInitEvent, AbilityMeta, Capability, SpecifiedAbility, Stance},
         arthropod, biped_large, biped_small, bird_medium,
-        buff::{BuffCategory, BuffChange},
+        buff::{Buff, BuffCategory, BuffChange, BuffData, BuffSource, DestInfo},
         character_state::OutputEvents,
         controller::InventoryManip,
         golem,
@@ -15,15 +15,16 @@ use crate::{
         },
         quadruped_low, quadruped_medium, quadruped_small, ship,
         skills::{Skill, SwimSkill, SKILL_MODIFIERS},
-        theropod, Body, CharacterState, Density, InputAttr, InputKind, InventoryAction, Melee,
-        StateUpdate,
+        theropod, Alignment, Body, CharacterState, Density, InputAttr, InputKind, InventoryAction,
+        Melee, Pos, StateUpdate,
     },
-    consts::{FRIC_GROUND, GRAVITY, MAX_PICKUP_RANGE},
+    consts::{FRIC_GROUND, GRAVITY, MAX_MOUNT_RANGE, MAX_PICKUP_RANGE},
     event::{BuffEvent, ChangeStanceEvent, ComboChangeEvent, InventoryManipEvent, LocalEvent},
     mounting::Volume,
     outcome::Outcome,
     states::{behavior::JoinData, utils::CharacterState::Idle, *},
     terrain::{Block, TerrainGrid, UnlockKind},
+    uid::Uid,
     util::Dir,
     vol::ReadVol,
 };
@@ -113,6 +114,7 @@ impl Body {
                 biped_large::Species::Cultistwarlord => 110.0,
                 biped_large::Species::Cultistwarlock => 90.0,
                 biped_large::Species::Gigasfrost => 45.0,
+                biped_large::Species::Forgemaster => 100.0,
                 _ => 80.0,
             },
             Body::BirdMedium(_) => 80.0,
@@ -123,12 +125,14 @@ impl Body {
             Body::BipedSmall(biped_small) => match biped_small.species {
                 biped_small::Species::Haniwa => 65.0,
                 biped_small::Species::Boreal => 100.0,
+                biped_small::Species::Gnarling => 70.0,
                 _ => 80.0,
             },
             Body::Object(_) => 0.0,
             Body::ItemDrop(_) => 0.0,
             Body::Golem(body) => match body.species {
                 golem::Species::ClayGolem => 120.0,
+                golem::Species::IronGolem => 100.0,
                 _ => 60.0,
             },
             Body::Theropod(theropod) => match theropod.species {
@@ -162,7 +166,7 @@ impl Body {
                 quadruped_low::Species::Deadwood => 110.0,
                 quadruped_low::Species::Mossdrake => 100.0,
                 quadruped_low::Species::Driggle => 120.0,
-                quadruped_low::Species::HermitAlligator => 65.0,
+                quadruped_low::Species::Snaretongue => 120.0,
             },
             Body::Ship(ship::Body::Carriage) => 40.0,
             Body::Ship(_) => 0.0,
@@ -222,11 +226,17 @@ impl Body {
             Body::Dragon(_) => 1.0,
             Body::BirdLarge(_) => 7.0,
             Body::FishSmall(_) => 7.0,
-            Body::BipedLarge(_) => 2.7,
+            Body::BipedLarge(biped_large) => match biped_large.species {
+                biped_large::Species::Harvester => 2.0,
+                _ => 2.7,
+            },
             Body::BipedSmall(_) => 3.5,
             Body::Object(_) => 2.0,
             Body::ItemDrop(_) => 2.0,
-            Body::Golem(_) => 2.0,
+            Body::Golem(golem) => match golem.species {
+                golem::Species::WoodGolem => 1.2,
+                _ => 2.0,
+            },
             Body::Theropod(theropod) => match theropod.species {
                 theropod::Species::Archaeos => 2.3,
                 theropod::Species::Odonto => 2.3,
@@ -883,6 +893,34 @@ pub fn attempt_dance(data: &JoinData<'_>, update: &mut StateUpdate) {
     }
 }
 
+pub fn can_perform_pet(position: Pos, target_position: Pos, target_alignment: Alignment) -> bool {
+    let within_distance = position.0.distance_squared(target_position.0) <= MAX_MOUNT_RANGE.powi(2);
+    let valid_alignment = matches!(target_alignment, Alignment::Owned(_) | Alignment::Tame);
+
+    within_distance && valid_alignment
+}
+
+pub fn attempt_pet(data: &JoinData<'_>, update: &mut StateUpdate, target_uid: Uid) {
+    let can_pet = data
+        .id_maps
+        .uid_entity(target_uid)
+        .and_then(|target_entity| {
+            data.prev_phys_caches
+                .get(target_entity)
+                .and_then(|prev_phys| prev_phys.pos)
+                .zip(data.alignments.get(target_entity))
+        })
+        .map_or(false, |(target_position, target_alignment)| {
+            can_perform_pet(*data.pos, target_position, *target_alignment)
+        });
+
+    if can_pet && data.physics.on_ground.is_some() && data.body.is_humanoid() {
+        update.character = CharacterState::Pet(pet::Data {
+            static_data: pet::StaticData { target_uid },
+        });
+    }
+}
+
 pub fn attempt_talk(data: &JoinData<'_>, update: &mut StateUpdate) {
     if data.physics.on_ground.is_some() {
         update.character = CharacterState::Talk;
@@ -1267,7 +1305,14 @@ fn handle_ability(
                     Some(data.body),
                     Some(data.character),
                     &context,
+                    Some(data.stats),
                 )
+            })
+            .map(|(mut a, f, s)| {
+                if let Some(contextual_stats) = a.ability_meta().contextual_stats {
+                    a = a.adjusted_by_stats(contextual_stats.equivalent_stats(data))
+                }
+                (a, f, s)
             })
             .filter(|(ability, _, _)| ability.requirements_paid(data, update))
         {
@@ -1288,6 +1333,28 @@ fn handle_ability(
                         output_events.emit_server(ChangeStanceEvent {
                             entity: data.entity,
                             stance,
+                        });
+                    },
+                    AbilityInitEvent::GainBuff {
+                        kind,
+                        strength,
+                        duration,
+                    } => {
+                        let dest_info = DestInfo {
+                            stats: Some(data.stats),
+                            mass: Some(data.mass),
+                        };
+                        output_events.emit_server(BuffEvent {
+                            entity: data.entity,
+                            buff_change: BuffChange::Add(Buff::new(
+                                kind,
+                                BuffData::new(strength, duration),
+                                vec![BuffCategory::SelfBuff],
+                                BuffSource::Character { by: *data.uid },
+                                *data.time,
+                                dest_info,
+                                Some(data.mass),
+                            )),
                         });
                     },
                 }
@@ -1678,14 +1745,16 @@ pub enum ComboConsumption {
     #[default]
     All,
     Half,
+    Cost,
 }
 
 impl ComboConsumption {
-    pub fn consume(&self, data: &JoinData, output_events: &mut OutputEvents) {
+    pub fn consume(&self, data: &JoinData, output_events: &mut OutputEvents, cost: u32) {
         let combo = data.combo.map_or(0, |c| c.counter());
         let to_consume = match self {
             Self::All => combo,
             Self::Half => (combo + 1) / 2,
+            Self::Cost => cost,
         };
         output_events.emit_server(ComboChangeEvent {
             entity: data.entity,

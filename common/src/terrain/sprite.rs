@@ -39,10 +39,7 @@ pub use self::magic::{Attribute, AttributeError};
 
 use crate::{
     attributes,
-    comp::{
-        item::{ItemDefinitionId, ItemDefinitionIdOwned},
-        tool::ToolKind,
-    },
+    comp::{item::ItemDefinitionIdOwned, tool::ToolKind},
     lottery::LootSpec,
     make_case_elim, sprites,
     terrain::Block,
@@ -69,37 +66,43 @@ sprites! {
         SmokeDummy = 0x01,
         Bomb       = 0x02,
         FireBlock  = 0x03, // FireBlock for Burning Buff
-        Mine       = 0x04,
-        HotSurface = 0x05,
+        HotSurface = 0x04,
+        Stones2    = 0x05, // Same as `Stones` but not collectible
     },
     // Furniture. In the future, we might add an attribute to customise material
     // TODO: Remove sizes and variants, represent with attributes
     Furniture = 2 has Ori {
         // Indoor
-        CoatRack         = 0x00,
-        Bed              = 0x01,
-        Bench            = 0x02,
-        ChairSingle      = 0x03,
-        ChairDouble      = 0x04,
-        DrawerLarge      = 0x05,
-        DrawerMedium     = 0x06,
-        DrawerSmall      = 0x07,
-        TableSide        = 0x08,
-        TableDining      = 0x09,
-        TableDouble      = 0x0A,
-        WardrobeSingle   = 0x0B,
-        WardrobeDouble   = 0x0C,
-        BookshelfArabic  = 0x0D,
-        WallTableArabic  = 0x0E,
-        TableArabicLarge = 0x0F,
-        TableArabicSmall = 0x10,
-        CupboardArabic   = 0x11,
-        OvenArabic       = 0x12,
-        CushionArabic    = 0x13,
-        CanapeArabic     = 0x14,
-        Shelf            = 0x15,
-        Planter          = 0x16,
-        Pot              = 0x17,
+        CoatRack           = 0x00,
+        Bed                = 0x01,
+        Bench              = 0x02,
+        ChairSingle        = 0x03,
+        ChairDouble        = 0x04,
+        DrawerLarge        = 0x05,
+        DrawerMedium       = 0x06,
+        DrawerSmall        = 0x07,
+        TableSide          = 0x08,
+        TableDining        = 0x09,
+        TableDouble        = 0x0A,
+        WardrobeSingle     = 0x0B,
+        WardrobeDouble     = 0x0C,
+        BookshelfArabic    = 0x0D,
+        WallTableArabic    = 0x0E,
+        TableArabicLarge   = 0x0F,
+        TableArabicSmall   = 0x10,
+        CupboardArabic     = 0x11,
+        OvenArabic         = 0x12,
+        CushionArabic      = 0x13,
+        CanapeArabic       = 0x14,
+        Shelf              = 0x15,
+        Planter            = 0x16,
+        Pot                = 0x17,
+        BedMesa            = 0x18,
+        WallTableMesa      = 0x19,
+        MirrorMesa         = 0x1A,
+        WardrobeSingleMesa = 0x1B,
+        WardrobeDoubleMesa = 0x1C,
+        CupboardMesa       = 0x1D,
         // Crafting
         CraftingBench    = 0x20,
         Forge            = 0x21,
@@ -122,11 +125,12 @@ sprites! {
         CoralChest        = 0x37,
         HaniwaUrn         = 0x38,
         TerracottaChest   = 0x39,
-        CommonLockedChest = 0x3A,
-        ChestBuried       = 0x3B,
-        Crate             = 0x3C,
-        Barrel            = 0x3D,
-        CrateBlock        = 0x3E,
+        SahaginChest      = 0x3A,
+        CommonLockedChest = 0x3B,
+        ChestBuried       = 0x3C,
+        Crate             = 0x3D,
+        Barrel            = 0x3E,
+        CrateBlock        = 0x3F,
         // Wall
         HangingBasket     = 0x50,
         HangingSign       = 0x51,
@@ -137,6 +141,7 @@ sprites! {
         WallLampSmall     = 0x56,
         WallSconce        = 0x57,
         DungeonWallDecor  = 0x58,
+        WallLampMesa      = 0x59,
         // Outdoor
         Tent          = 0x60,
         Bedroll       = 0x61,
@@ -305,6 +310,9 @@ sprites! {
         HaniwaKeyhole = 0x0A,
         TerracottaKeyDoor = 0x0B,
         TerracottaKeyhole = 0x0C,
+        SahaginKeyhole = 0x0D,
+        SahaginKeyDoor = 0x0E,
+
         // Windows
         Window1      = 0x10,
         Window2      = 0x11,
@@ -352,7 +360,7 @@ sprites! {
         // Artificial
         Grave            = 0x10,
         Gravestone       = 0x11,
-        MelonCut         = 0x12,
+        Melon            = 0x12,
         ForgeTools       = 0x13,
         JugAndBowlArabic = 0x14,
         JugArabic        = 0x15,
@@ -374,6 +382,7 @@ sprites! {
         StreetLampTall  = 2,
         SeashellLantern = 3,
         FireBowlGround  = 4,
+        MesaLantern     = 5,
     },
 }
 
@@ -430,6 +439,7 @@ impl SpriteKind {
             SpriteKind::DungeonChest5 => 1.09,
             SpriteKind::CoralChest => 1.09,
             SpriteKind::HaniwaUrn => 1.09,
+            SpriteKind::SahaginChest => 1.09,
             SpriteKind::TerracottaChest => 1.09,
             SpriteKind::TerracottaStatue => 5.29,
             SpriteKind::TerracottaBlock => 1.00,
@@ -439,12 +449,14 @@ impl SpriteKind {
             SpriteKind::SeaDecorWindowVer => 1.09,
             SpriteKind::SeaDecorPillar => 2.55,
             SpriteKind::SeashellLantern => 2.09,
+            SpriteKind::MesaLantern => 1.3,
             SpriteKind::Rope => 1.09,
             SpriteKind::StreetLamp => 2.65,
             SpriteKind::Carrot => 0.18,
             SpriteKind::Radish => 0.18,
             SpriteKind::FireBowlGround => 0.55,
             SpriteKind::Bed => 0.72,
+            SpriteKind::BedMesa => 0.82,
             SpriteKind::Bench => 0.5,
             SpriteKind::ChairSingle => 0.5,
             SpriteKind::ChairDouble => 0.5,
@@ -460,6 +472,9 @@ impl SpriteKind {
             SpriteKind::TableDouble => 1.45,
             SpriteKind::WardrobeSingle => 3.0,
             SpriteKind::WardrobeDouble => 3.0,
+            SpriteKind::WardrobeSingleMesa => 2.0,
+            SpriteKind::WardrobeDoubleMesa => 2.0,
+            SpriteKind::MirrorMesa => 2.0,
             SpriteKind::Pot => 0.90,
             SpriteKind::Mud => 0.36,
             SpriteKind::ChestBuried => 0.91,
@@ -502,6 +517,8 @@ impl SpriteKind {
             | SpriteKind::BoneKeyDoor
             | SpriteKind::HaniwaKeyhole
             | SpriteKind::HaniwaKeyDoor
+            | SpriteKind::SahaginKeyhole
+            | SpriteKind::SahaginKeyDoor
             | SpriteKind::HaniwaTrap
             | SpriteKind::HaniwaTrapTriggered
             | SpriteKind::TerracottaKeyDoor
@@ -526,7 +543,7 @@ impl SpriteKind {
             | SpriteKind::Gold => 0.6,
             SpriteKind::EnsnaringVines
             | SpriteKind::CavernLillypadBlue
-            | SpriteKind::EnsnaringWeb => 0.1,
+            | SpriteKind::EnsnaringWeb => 0.15,
             SpriteKind::LillyPads => 0.1,
             SpriteKind::WindowArabic | SpriteKind::BookshelfArabic => 1.9,
             SpriteKind::DecorSetArabic => 2.6,
@@ -539,7 +556,7 @@ impl SpriteKind {
             SpriteKind::CupboardArabic => 4.5,
             SpriteKind::WallTableArabic => 2.3,
             SpriteKind::JugAndBowlArabic => 1.4,
-            SpriteKind::MelonCut => 0.7,
+            SpriteKind::Melon => 0.7,
             SpriteKind::OvenArabic => 3.2,
             SpriteKind::FountainArabic => 2.4,
             SpriteKind::Hearth => 2.3,
@@ -555,7 +572,6 @@ impl SpriteKind {
             SpriteKind::MagicalSeal => 1.0,
             SpriteKind::Helm => 1.7,
             SpriteKind::Sign => 17.0 / 11.0,
-            SpriteKind::Mine => 2.0 / 11.0,
             SpriteKind::SmithingTable => 13.0 / 11.0,
             SpriteKind::Forge0 => 17.0 / 11.0,
             SpriteKind::GearWheel0 => 3.0 / 11.0,
@@ -678,6 +694,7 @@ impl SpriteKind {
             SpriteKind::TerracottaChest => {
                 table("common.loot_tables.dungeon.terracotta.chest_terracotta")
             },
+            SpriteKind::SahaginChest => table("common.loot_tables.dungeon.sahagin.key_chest"),
             SpriteKind::Mud => table("common.loot_tables.sprite.mud"),
             SpriteKind::Grave => table("common.loot_tables.sprite.mud"),
             SpriteKind::Crate => table("common.loot_tables.sprite.crate"),
@@ -693,6 +710,7 @@ impl SpriteKind {
             | SpriteKind::HaniwaKeyhole
             | SpriteKind::GlassKeyhole
             | SpriteKind::KeyholeBars
+            | SpriteKind::SahaginKeyhole
             | SpriteKind::TerracottaKeyhole => {
                 return Some(None);
             },
@@ -721,6 +739,7 @@ impl SpriteKind {
             },
             SpriteKind::Helm => Some((Vec3::new(0.0, -1.0, 0.0), Vec3::unit_y())),
             SpriteKind::Bed => Some((Vec3::new(0.0, 0.0, 0.6), -Vec3::unit_y())),
+            SpriteKind::BedMesa => Some((Vec3::new(0.0, 0.0, 0.6), -Vec3::unit_y())),
             SpriteKind::BedrollSnow | SpriteKind::BedrollPirate => {
                 Some((Vec3::new(0.0, 0.0, 0.1), -Vec3::unit_x()))
             },
@@ -783,24 +802,32 @@ impl SpriteKind {
     pub fn unlock_condition(&self, cfg: Option<SpriteCfg>) -> UnlockKind {
         cfg.and_then(|cfg| cfg.unlock)
             .unwrap_or_else(|| match self {
-                // Example, do not let this merge with twigs requiring cheese to pick up
                 SpriteKind::CommonLockedChest => UnlockKind::Consumes(
-                    ItemDefinitionId::Simple("common.items.utility.lockpick_0").to_owned(),
+                    ItemDefinitionIdOwned::Simple(String::from("common.items.utility.lockpick_0")),
                 ),
-                SpriteKind::BoneKeyhole => UnlockKind::Consumes(
-                    ItemDefinitionId::Simple("common.items.keys.bone_key").to_owned(),
-                ),
-                SpriteKind::HaniwaKeyhole => UnlockKind::Consumes(
-                    ItemDefinitionId::Simple("common.items.keys.haniwa_key").to_owned(),
-                ),
-                SpriteKind::GlassKeyhole => UnlockKind::Consumes(
-                    ItemDefinitionId::Simple("common.items.keys.glass_key").to_owned(),
-                ),
+                SpriteKind::SahaginKeyhole => UnlockKind::Consumes(ItemDefinitionIdOwned::Simple(
+                    String::from("common.items.keys.sahagin_key"),
+                )),
+                SpriteKind::BoneKeyhole => UnlockKind::Consumes(ItemDefinitionIdOwned::Simple(
+                    String::from("common.items.keys.bone_key"),
+                )),
+                SpriteKind::HaniwaKeyhole => UnlockKind::Consumes(ItemDefinitionIdOwned::Simple(
+                    String::from("common.items.keys.haniwa_key"),
+                )),
+                SpriteKind::GlassKeyhole => UnlockKind::Consumes(ItemDefinitionIdOwned::Simple(
+                    String::from("common.items.keys.glass_key"),
+                )),
                 SpriteKind::TerracottaChest => UnlockKind::Consumes(
-                    ItemDefinitionId::Simple("common.items.keys.terracotta_key_chest").to_owned(),
+                    ItemDefinitionIdOwned::Simple(String::from(
+                        "common.items.keys.terracotta_key_chest",
+                    ))
+                    .to_owned(),
                 ),
                 SpriteKind::TerracottaKeyhole => UnlockKind::Consumes(
-                    ItemDefinitionId::Simple("common.items.keys.terracotta_key_door").to_owned(),
+                    ItemDefinitionIdOwned::Simple(String::from(
+                        "common.items.keys.terracotta_key_door",
+                    ))
+                    .to_owned(),
                 ),
                 _ => UnlockKind::Free,
             })
@@ -840,11 +867,9 @@ pub enum UnlockKind {
     Free,
     /// The sprite requires that the opening character has a given item in their
     /// inventory
-    // TODO: use ItemKey here?
     Requires(ItemDefinitionIdOwned),
     /// The sprite will consume the given item from the opening character's
     /// inventory
-    // TODO: use ItemKey here?
     Consumes(ItemDefinitionIdOwned),
 }
 

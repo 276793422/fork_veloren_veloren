@@ -2,9 +2,9 @@
 use crate::{
     combat::{
         AttackEffect, CombatBuff, CombatBuffStrength, CombatEffect, CombatRequirement,
-        DamagedEffect,
+        DamagedEffect, DeathEffect,
     },
-    comp::{aura::AuraKey, Stats},
+    comp::{aura::AuraKey, Mass, Stats},
     resources::{Secs, Time},
     uid::Uid,
 };
@@ -27,7 +27,9 @@ new_key_type! { pub struct BuffKey; }
     Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize, PartialOrd, Ord, EnumIter, Enum,
 )]
 pub enum BuffKind {
-    // Buffs
+    // =================
+    //       BUFFS
+    // =================
     /// Restores health/time for some period.
     /// Strength should be the healing per second.
     Regeneration,
@@ -115,9 +117,9 @@ pub enum BuffKind {
     /// generated when damaged, and decreases movement speed.
     /// Damage resistance increases non-linearly with strength, 0.5 is 50% and
     /// 1.0 is 67%. Poise resistance increases non-linearly with strength, 0.5
-    /// is 50% and 1.0 is 67%. Movement speed decreases linearly with strength,
-    /// 0.5 is 50% and 1.0 is 33%. Combo generation is linear with strength, 1.0
-    /// is 5 combo generated on being hit.
+    /// is 50% and 1.0 is 67%. Movement speed is decreased to 50%. Combo
+    /// generation is linear with strength, 1.0 is 5 combo generated on being
+    /// hit.
     Defiance,
     /// Increases both attack damage, vulnerability to damage, attack speed, and
     /// movement speed Damage increases linearly with strength, 1.0 is a
@@ -127,7 +129,27 @@ pub enum BuffKind {
     /// non-linearly with strength, 0.5 is a 12.5% increase, 1.0 is a 16.7%
     /// increase decrease.
     Berserk,
-    // Debuffs
+    /// Increases poise resistance and energy reward. However if killed, buffs
+    /// killer with Reckless buff. Poise resistance scales non-linearly with
+    /// strength, 0.5 is 50% and 1.0 is 67%. Energy reward scales linearly with
+    /// strength, 0.5 is +50% and 1.0 is +100% strength. Reckless buff reward
+    /// strength is equal to scornful taunt buff strength.
+    ScornfulTaunt,
+    /// Increases damage resistance, causes energy to be generated when damaged,
+    /// and decreases movement speed. Damage resistance increases non-linearly
+    /// with strength, 0.5 is 50% and 1.0 is 67%. Energy generation is linear
+    /// with strength, 1.0 is 10 energy per hit. Movement speed is decreased to
+    /// 70%.
+    Tenacity,
+    /// Applies to some debuffs that have strong CC effects. Automatically
+    /// gained upon receiving those debuffs, and causes future instances of
+    /// those debuffs to be applied with reduced duration.
+    /// Strength linearly decreases the duration of newly applied, affected
+    /// debuffs, 0.5 is a 50% reduction.
+    Resilience,
+    // =================
+    //      DEBUFFS
+    // =================
     /// Does damage to a creature over time.
     /// Strength should be the DPS of the debuff.
     Burning,
@@ -171,7 +193,29 @@ pub enum BuffKind {
     /// 33.3% and energy reward reduced by 200%. Energy reward can't be
     /// reduced by more than 200%, to a minimum value of -100%.
     Heatstroke,
-    // Complex, non-obvious buffs
+    /// Reduces movement speed to 0.
+    /// Strength increases the relative mass of the creature that can be
+    /// targeted. A strength of 1.0 means that a creature of the same mass gets
+    /// rooted for the full duration. A strength of 2.0 means a creature of
+    /// twice the mass gets rooted for the full duration. If the target's mass
+    /// is higher than the strength allows for, duration gets reduced using a
+    /// mutiplier from the ratio of masses.
+    Rooted,
+    /// Slows movement speed and reduces energy reward
+    /// Both scale non-linearly with strength, 0.5 leads to 50% reduction of
+    /// energy reward and 33% reduction of move speed. 1.0 leads to 67%
+    /// reduction of energy reward and 50% reduction of move speed.
+    Winded,
+    /// Prevents use of auxiliary abilities.
+    /// Does not scale with strength
+    Concussion,
+    /// Increases amount of poise damage received
+    /// Scales linearly with strength, 1.0 leads to 100% more poise damage
+    /// received
+    Staggered,
+    // =================
+    //      COMPLEX
+    // =================
     /// Changed into another body.
     Polymorphed,
 }
@@ -221,7 +265,10 @@ impl BuffKind {
             | BuffKind::Sunderer
             | BuffKind::Defiance
             | BuffKind::Bloodfeast
-            | BuffKind::Berserk => BuffDescriptor::SimplePositive,
+            | BuffKind::Berserk
+            | BuffKind::ScornfulTaunt
+            | BuffKind::Tenacity
+            | BuffKind::Resilience => BuffDescriptor::SimplePositive,
             BuffKind::Bleeding
             | BuffKind::Cursed
             | BuffKind::Burning
@@ -232,7 +279,11 @@ impl BuffKind {
             | BuffKind::Poisoned
             | BuffKind::Parried
             | BuffKind::PotionSickness
-            | BuffKind::Heatstroke => BuffDescriptor::SimpleNegative,
+            | BuffKind::Heatstroke
+            | BuffKind::Rooted
+            | BuffKind::Winded
+            | BuffKind::Concussion
+            | BuffKind::Staggered => BuffDescriptor::SimpleNegative,
             BuffKind::Polymorphed => BuffDescriptor::Complex,
         }
     }
@@ -266,11 +317,14 @@ impl BuffKind {
 
     /// Checks if multiple instances of the buff should be processed, instead of
     /// only the strongest.
-    pub fn stacks(self) -> bool { matches!(self, BuffKind::PotionSickness) }
+    pub fn stacks(self) -> bool { matches!(self, BuffKind::PotionSickness | BuffKind::Resilience) }
 
     pub fn effects(&self, data: &BuffData, stats: Option<&Stats>) -> Vec<BuffEffect> {
         // Normalized nonlinear scaling
+        // TODO: Do we want to make denominator term parameterized. Come back to if we
+        // add nn_scaling3.
         let nn_scaling = |a| a / (a + 0.5);
+        let nn_scaling2 = |a| a / (a + 1.0);
         let instance = rand::random();
         match self {
             BuffKind::Bleeding => vec![BuffEffect::HealthChangeOverTime {
@@ -389,7 +443,10 @@ impl BuffKind {
                 BuffEffect::PoiseReduction(nn_scaling(data.strength)),
                 BuffEffect::PoiseDamageFromLostHealth(data.strength),
             ],
-            BuffKind::Parried => vec![BuffEffect::AttackSpeed(0.5)],
+            BuffKind::Parried => vec![
+                BuffEffect::RecoverySpeed(0.25),
+                BuffEffect::PrecisionVulnerabilityOverride(1.0),
+            ],
             //TODO: Handle potion sickness in a more general way.
             BuffKind::PotionSickness => vec![
                 BuffEffect::HealReduction(data.strength),
@@ -448,7 +505,7 @@ impl BuffKind {
             BuffKind::Defiance => vec![
                 BuffEffect::DamageReduction(nn_scaling(data.strength)),
                 BuffEffect::PoiseReduction(nn_scaling(data.strength)),
-                BuffEffect::MovementSpeed(1.0 - nn_scaling(data.strength)),
+                BuffEffect::MovementSpeed(0.5),
                 BuffEffect::DamagedEffect(DamagedEffect::Combo(
                     (data.strength * 5.0).round() as i32
                 )),
@@ -463,6 +520,28 @@ impl BuffKind {
                 BuffEffect::MovementSpeed(1.0 - nn_scaling(data.strength) * 0.5),
                 BuffEffect::EnergyReward((1.0 - nn_scaling(data.strength) * 3.0).max(-1.0)),
             ],
+            BuffKind::ScornfulTaunt => vec![
+                BuffEffect::PoiseReduction(nn_scaling(data.strength)),
+                BuffEffect::EnergyReward(1.0 + data.strength),
+                BuffEffect::DeathEffect(DeathEffect::AttackerBuff {
+                    kind: BuffKind::Reckless,
+                    strength: data.strength,
+                    duration: data.duration,
+                }),
+            ],
+            BuffKind::Rooted => vec![BuffEffect::MovementSpeed(0.0)],
+            BuffKind::Winded => vec![
+                BuffEffect::MovementSpeed(1.0 - nn_scaling2(data.strength)),
+                BuffEffect::EnergyReward(1.0 - nn_scaling(data.strength)),
+            ],
+            BuffKind::Concussion => vec![BuffEffect::DisableAuxiliaryAbilities],
+            BuffKind::Staggered => vec![BuffEffect::PoiseReduction(-data.strength)],
+            BuffKind::Tenacity => vec![
+                BuffEffect::DamageReduction(nn_scaling(data.strength)),
+                BuffEffect::MovementSpeed(0.7),
+                BuffEffect::DamagedEffect(DamagedEffect::Energy(data.strength * 10.0)),
+            ],
+            BuffKind::Resilience => vec![BuffEffect::CrowdControlResistance(data.strength)],
         }
     }
 
@@ -476,6 +555,42 @@ impl BuffKind {
             _ => {},
         }
         cat_ids
+    }
+
+    fn modify_data(
+        &self,
+        mut data: BuffData,
+        source_mass: Option<&Mass>,
+        dest_info: DestInfo,
+    ) -> BuffData {
+        // TODO: Remove clippy allow after another buff needs this
+        #[allow(clippy::single_match)]
+        match self {
+            BuffKind::Rooted => {
+                let source_mass = source_mass.map_or(50.0, |m| m.0 as f64);
+                let dest_mass = dest_info.mass.map_or(50.0, |m| m.0 as f64);
+                let ratio = (source_mass / dest_mass).min(1.0);
+                data.duration = data.duration.map(|dur| Secs(dur.0 * ratio));
+            },
+            _ => {},
+        }
+        if self.resilience_ccr_strength(data).is_some() {
+            let dur_mult = dest_info
+                .stats
+                .map_or(1.0, |s| (1.0 - s.crowd_control_resistance).max(0.0));
+            data.duration = data.duration.map(|dur| dur * dur_mult as f64);
+        }
+        data
+    }
+
+    /// If a buff kind should also give resilience when applied, return the
+    /// strength that resilience should have, otherwise return None
+    pub fn resilience_ccr_strength(&self, data: BuffData) -> Option<f32> {
+        match self {
+            BuffKind::Concussion => Some(0.3),
+            BuffKind::Frozen => Some(data.strength),
+            _ => None,
+        }
     }
 }
 
@@ -584,6 +699,8 @@ pub enum BuffEffect {
     MovementSpeed(f32),
     /// Modifies attack speed of target
     AttackSpeed(f32),
+    /// Modifies recovery speed of target
+    RecoverySpeed(f32),
     /// Modifies ground friction of target
     GroundFriction(f32),
     /// Reduces poise damage taken after armor is accounted for by this fraction
@@ -598,6 +715,8 @@ pub enum BuffEffect {
     AttackDamage(f32),
     /// Overrides the precision multiplier applied to an attack
     PrecisionOverride(f32),
+    /// Overrides the precision multiplier applied to an incoming attack
+    PrecisionVulnerabilityOverride(f32),
     /// Changes body.
     BodyChange(Body),
     BuffImmunity(BuffKind),
@@ -612,6 +731,12 @@ pub enum BuffEffect {
     EnergyReward(f32),
     /// Add an effect to the entity when damaged by an attack
     DamagedEffect(DamagedEffect),
+    /// Add an effect to the entity when killed
+    DeathEffect(DeathEffect),
+    /// Prevents use of auxiliary abilities
+    DisableAuxiliaryAbilities,
+    /// Reduces duration of crowd control debuffs
+    CrowdControlResistance(f32),
 }
 
 /// Actual de/buff.
@@ -667,9 +792,12 @@ impl Buff {
         cat_ids: Vec<BuffCategory>,
         source: BuffSource,
         time: Time,
-        stats: Option<&Stats>,
+        dest_info: DestInfo,
+        // Create source_info if we need more parameters from source
+        source_mass: Option<&Mass>,
     ) -> Self {
-        let effects = kind.effects(&data, stats);
+        let data = kind.modify_data(data, source_mass, dest_info);
+        let effects = kind.effects(&data, dest_info.stats);
         let cat_ids = kind.extend_cat_ids(cat_ids);
         let start_time = Time(time.0 + data.delay.map_or(0.0, |delay| delay.0));
         let end_time = if cat_ids
@@ -914,6 +1042,12 @@ impl Component for Buffs {
     type Storage = DerefFlaggedStorage<Self, VecStorage<Self>>;
 }
 
+#[derive(Default, Copy, Clone)]
+pub struct DestInfo<'a> {
+    pub stats: Option<&'a Stats>,
+    pub mass: Option<&'a Mass>,
+}
+
 #[cfg(test)]
 pub mod tests {
     use crate::comp::buff::*;
@@ -929,6 +1063,7 @@ pub mod tests {
             Vec::new(),
             BuffSource::Unknown,
             time,
+            DestInfo::default(),
             None,
         )
     }

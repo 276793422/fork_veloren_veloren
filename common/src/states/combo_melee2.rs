@@ -1,15 +1,18 @@
 use crate::{
     combat,
+    combat::{Attack, AttackDamage, Damage, DamageKind::Crushing, DamageSource, GroupTarget},
     comp::{
-        character_state::OutputEvents, tool::Stats, CharacterState, MeleeConstructor, StateUpdate,
+        character_state::OutputEvents, item::Reagent, melee::CustomCombo, tool::Stats,
+        CharacterState, MeleeConstructor, StateUpdate,
     },
-    event::LocalEvent,
+    event::{ExplosionEvent, LocalEvent},
     outcome::Outcome,
     states::{
         behavior::{CharacterBehavior, JoinData},
         combo_melee2,
         utils::*,
     },
+    Explosion, RadiusEffect,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -35,7 +38,7 @@ pub struct Strike<T> {
     /// Adjusts turning rate during the attack
     pub ori_modifier: f32,
     #[serde(default)]
-    pub additional_combo: i32,
+    pub custom_combo: Option<CustomCombo>,
 }
 
 impl Strike<f32> {
@@ -48,7 +51,7 @@ impl Strike<f32> {
             recover_duration: Duration::from_secs_f32(self.recover_duration),
             movement: self.movement,
             ori_modifier: self.ori_modifier,
-            additional_combo: self.additional_combo,
+            custom_combo: self.custom_combo,
         }
     }
 
@@ -62,7 +65,7 @@ impl Strike<f32> {
             recover_duration: self.recover_duration / stats.speed,
             movement: self.movement,
             ori_modifier: self.ori_modifier,
-            additional_combo: self.additional_combo,
+            custom_combo: self.custom_combo,
         }
     }
 }
@@ -176,13 +179,40 @@ impl CharacterBehavior for Data {
                         data.entity,
                         strike_data
                             .melee_constructor
-                            .with_combo(1 + strike_data.additional_combo)
+                            .custom_combo(strike_data.custom_combo)
                             .create_melee(precision_mult, tool_stats),
                     );
                 } else if self.timer < strike_data.swing_duration {
                     // Swings
                     if let CharacterState::ComboMelee2(c) = &mut update.character {
                         c.timer = tick_attack_or_default(data, self.timer, None);
+                    }
+                    if self.static_data.specifier == Some(FrontendSpecifier::IronGolemFist) {
+                        let damage = AttackDamage::new(
+                            Damage {
+                                source: DamageSource::Explosion,
+                                kind: Crushing,
+                                value: 10.0,
+                            },
+                            Some(GroupTarget::OutOfGroup),
+                            rand::random(),
+                        );
+                        let attack = Attack::default().with_damage(damage);
+                        let explosion = Explosion {
+                            effects: vec![RadiusEffect::Attack(attack)],
+                            radius: data.body.max_radius() * 10.0,
+                            reagent: Some(Reagent::Yellow),
+                            min_falloff: 0.5,
+                        };
+                        let pos =
+                            data.pos.0 + (*data.ori.look_dir() * (data.body.max_radius() * 3.0));
+                        let explosition =
+                            Vec3::new(pos.x, pos.y, pos.z + (data.body.height() / 2.0));
+                        output_events.emit_server(ExplosionEvent {
+                            pos: explosition,
+                            explosion,
+                            owner: Some(*data.uid),
+                        });
                     }
                 } else if self.start_next_strike {
                     if let CharacterState::ComboMelee2(c) = &mut update.character {
@@ -204,7 +234,11 @@ impl CharacterBehavior for Data {
                 if self.timer < strike_data.recover_duration {
                     // Recovery
                     if let CharacterState::ComboMelee2(c) = &mut update.character {
-                        c.timer = tick_attack_or_default(data, self.timer, None);
+                        c.timer = tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        );
                     }
                 } else {
                     // Return to wielding
@@ -253,4 +287,5 @@ fn next_strike(data: &JoinData, update: &mut StateUpdate) {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FrontendSpecifier {
     ClayGolemDash,
+    IronGolemFist,
 }

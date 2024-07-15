@@ -6,7 +6,7 @@ use common::{
     resources::TimeOfDay,
     terrain::{BiomeKind, Block},
     time::DayPeriod,
-    vol::{BaseVol, ReadVol, RectSizedVol, WriteVol},
+    vol::{ReadVol, RectSizedVol, WriteVol},
 };
 use rand::prelude::*;
 use serde::Deserialize;
@@ -171,6 +171,10 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
             "world.wildlife.spawn.calendar.april_fools.tundra.core",
             |c, _col| close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * 0.5,
         ),
+        (
+            "world.wildlife.spawn.calendar.easter.tundra.core",
+            |c, _col| close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * 0.5,
+        ),
         // Snowy animals
         ("world.wildlife.spawn.tundra.snow", |c, col| {
             close(c.temp, CONFIG.snow_temp, 0.3) * BASE_DENSITY * col.snow_cover as i32 as f32 * 1.0
@@ -196,6 +200,15 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
         ),
         (
             "world.wildlife.spawn.calendar.april_fools.tundra.snow",
+            |c, col| {
+                close(c.temp, CONFIG.snow_temp, 0.3)
+                    * BASE_DENSITY
+                    * col.snow_cover as i32 as f32
+                    * 1.0
+            },
+        ),
+        (
+            "world.wildlife.spawn.calendar.easter.tundra.snow",
             |c, col| {
                 close(c.temp, CONFIG.snow_temp, 0.3)
                     * BASE_DENSITY
@@ -232,6 +245,10 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
             "world.wildlife.spawn.calendar.april_fools.tundra.forest",
             |c, col| close(c.temp, CONFIG.snow_temp, 0.3) * col.tree_density * BASE_DENSITY * 1.4,
         ),
+        (
+            "world.wildlife.spawn.calendar.easter.tundra.forest",
+            |c, col| close(c.temp, CONFIG.snow_temp, 0.3) * col.tree_density * BASE_DENSITY * 1.4,
+        ),
         // **Taiga**
         // Forest core animals
         ("world.wildlife.spawn.taiga.core_forest", |c, col| {
@@ -252,6 +269,12 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
         ),
         (
             "world.wildlife.spawn.calendar.april_fools.taiga.core",
+            |c, col| {
+                close(c.temp, CONFIG.snow_temp + 0.2, 0.2) * col.tree_density * BASE_DENSITY * 0.4
+            },
+        ),
+        (
+            "world.wildlife.spawn.calendar.easter.taiga.core",
             |c, col| {
                 close(c.temp, CONFIG.snow_temp + 0.2, 0.2) * col.tree_density * BASE_DENSITY * 0.4
             },
@@ -338,6 +361,15 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
                     * 4.0
             },
         ),
+        (
+            "world.wildlife.spawn.calendar.easter.temperate.rainforest",
+            |c, _col| {
+                close(c.temp, CONFIG.temperate_temp + 0.1, 0.6)
+                    * close(c.humidity, CONFIG.forest_hum, 0.6)
+                    * BASE_DENSITY
+                    * 4.0
+            },
+        ),
         // Ocean animals
         ("world.wildlife.spawn.temperate.ocean", |_c, col| {
             close(col.temp, CONFIG.temperate_temp, 1.0) / 10.0
@@ -388,6 +420,15 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
         ),
         (
             "world.wildlife.spawn.calendar.april_fools.jungle.area",
+            |c, _col| {
+                close(c.temp, CONFIG.tropical_temp + 0.2, 0.3)
+                    * close(c.humidity, CONFIG.jungle_hum, 0.2)
+                    * BASE_DENSITY
+                    * 8.0
+            },
+        ),
+        (
+            "world.wildlife.spawn.calendar.easter.jungle.area",
             |c, _col| {
                 close(c.temp, CONFIG.tropical_temp + 0.2, 0.3)
                     * close(c.humidity, CONFIG.jungle_hum, 0.2)
@@ -513,7 +554,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
     dynamic_rng: &mut R,
     wpos2d: Vec2<i32>,
     mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
-    vol: &(impl BaseVol<Vox = Block> + RectSizedVol + ReadVol + WriteVol),
+    vol: &(impl RectSizedVol<Vox = Block> + ReadVol + WriteVol),
     index: IndexRef,
     chunk: &SimChunk,
     supplement: &mut ChunkSupplement,
@@ -546,8 +587,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
 
             let entity_group = scatter
                 .iter()
-                .enumerate()
-                .filter_map(|(_i, (entry, get_density))| {
+                .filter_map(|(entry, get_density)| {
                     let density = get_density(chunk, col_sample) * wildlife_density_modifier;
                     (density > 0.0)
                         .then(|| {

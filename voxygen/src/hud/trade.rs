@@ -562,6 +562,8 @@ impl<'a> Trade<'a> {
                     .resize(2 * MAX_TRADE_SLOTS, &mut ui.widget_id_generator());
             });
         }
+        let max_width = 170.0;
+        let mut total_text_height = 0.0;
         let mut total_quantity = 0;
         for i in 0..MAX_TRADE_SLOTS {
             let slot = tradeslots.get(i).cloned().unwrap_or(TradeSlot {
@@ -582,10 +584,16 @@ impl<'a> Trade<'a> {
                 })
                 .unwrap_or(Cow::Borrowed(""));
             let is_present = slot.quantity > 0 && slot.invslot.is_some();
-            Text::new(&format!("{} x {}", slot.quantity, itemname))
-                .top_left_with_margins_on(state.ids.inv_alignment[who], 10.0 + i as f64 * 30.0, 0.0)
+            Text::new(&format!("{}x {}", slot.quantity, &itemname))
+                .top_left_with_margins_on(
+                    state.ids.inv_alignment[who],
+                    15.0 + i as f64 * 20.0 + total_text_height,
+                    0.0,
+                )
                 .font_id(self.fonts.cyri.conrod_id)
                 .font_size(self.fonts.cyri.scale(20))
+                .wrap_by_word()
+                .w(max_width)
                 .color(Color::Rgba(
                     1.0,
                     1.0,
@@ -593,6 +601,15 @@ impl<'a> Trade<'a> {
                     if is_present { 1.0 } else { 0.0 },
                 ))
                 .set(state.ids.inv_textslots[i + who * MAX_TRADE_SLOTS], ui);
+            let label_height = match ui
+                .widget_graph()
+                .widget(state.ids.inv_textslots[i + who * MAX_TRADE_SLOTS])
+                .map(|widget| widget.rect)
+            {
+                Some(label_rect) => label_rect.h(),
+                None => 10.0,
+            };
+            total_text_height += label_height;
         }
         if total_quantity == 0 {
             Text::new("Nothing!")
@@ -768,7 +785,7 @@ impl<'a> Trade<'a> {
                 .set(state.ids.amount_input, ui)
             {
                 if new_input != key.input {
-                    key.input = new_input.trim().to_owned();
+                    new_input.trim().clone_into(&mut key.input);
                     if !key.input.is_empty() {
                         // trade amount can change with (shift||ctrl)-click
                         let amount = *trade.offers[key.who].get(&key.slot).unwrap_or(&0);

@@ -139,15 +139,6 @@ enum DayPeriod {
     Night,
 }
 
-/// Determines whether the sound is stopped, playing, or fading
-#[derive(Debug, Deserialize, PartialEq)]
-enum PlayState {
-    Playing,
-    Stopped,
-    FadingOut,
-    FadingIn,
-}
-
 /// Provides methods to control music playback
 pub struct MusicMgr {
     /// Collection of all the tracks
@@ -322,8 +313,7 @@ impl MusicMgr {
             }
             trace!(
                 "pre-play_random_track: {:?} {:?}",
-                self.last_activity,
-                music_state
+                self.last_activity, music_state
             );
             if let Ok(next_activity) = self.play_random_track(audio, state, client, &music_state) {
                 self.last_activity = next_activity;

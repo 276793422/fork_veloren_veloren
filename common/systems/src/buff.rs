@@ -6,12 +6,12 @@ use common::{
         body::{object, Body},
         buff::{
             Buff, BuffCategory, BuffChange, BuffData, BuffEffect, BuffKey, BuffKind, BuffSource,
-            Buffs,
+            Buffs, DestInfo,
         },
         fluid_dynamics::{Fluid, LiquidKind},
         item::MaterialStatManifest,
-        Alignment, Energy, Group, Health, HealthChange, Inventory, LightEmitter, ModifierKind,
-        PhysicsState, Player, Pos, Stats,
+        Alignment, Energy, Group, Health, HealthChange, Inventory, LightEmitter, Mass,
+        ModifierKind, PhysicsState, Player, Pos, Stats,
     },
     event::{
         BuffEvent, ChangeBodyEvent, CreateSpriteEvent, EmitExt, EnergyChangeEvent,
@@ -68,6 +68,7 @@ pub struct ReadData<'a> {
     alignments: ReadStorage<'a, Alignment>,
     players: ReadStorage<'a, Player>,
     uids: ReadStorage<'a, Uid>,
+    masses: ReadStorage<'a, Mass>,
 }
 
 #[derive(Default)]
@@ -153,10 +154,16 @@ impl<'a> System<'a> for Sys {
             &read_data.energies,
             read_data.uids.maybe(),
             read_data.physics_states.maybe(),
+            read_data.masses.maybe(),
         )
             .lend_join();
         buff_join.for_each(|comps| {
-            let (entity, buff_comp, mut stat, body, health, energy, uid, physics_state) = comps;
+            let (entity, buff_comp, mut stat, body, health, energy, uid, physics_state, mass) =
+                comps;
+            let dest_info = DestInfo {
+                stats: Some(&stat),
+                mass,
+            };
             // Apply buffs to entity based off of their current physics_state
             if let Some(physics_state) = physics_state {
                 // Set nearby entities on fire if burning
@@ -185,7 +192,13 @@ impl<'a> System<'a> for Sys {
                                     vec![BuffCategory::Natural],
                                     source,
                                     *read_data.time,
-                                    None,
+                                    DestInfo {
+                                        // Can't mutably access stats, and for burning debuff stats
+                                        // has no effect (for now)
+                                        stats: None,
+                                        mass: read_data.masses.get(t_entity),
+                                    },
+                                    mass,
                                 )),
                             });
                         }
@@ -193,9 +206,27 @@ impl<'a> System<'a> for Sys {
                 }
                 if matches!(
                     physics_state.on_ground.and_then(|b| b.get_sprite()),
-                    Some(SpriteKind::EnsnaringVines) | Some(SpriteKind::EnsnaringWeb)
+                    Some(SpriteKind::EnsnaringVines)
                 ) {
-                    // If on ensnaring vines, apply ensnared debuff
+                    // If on ensnaring vines, apply partial ensnared debuff
+                    emitters.emit(BuffEvent {
+                        entity,
+                        buff_change: BuffChange::Add(Buff::new(
+                            BuffKind::Ensnared,
+                            BuffData::new(0.5, Some(Secs(0.1))),
+                            Vec::new(),
+                            BuffSource::World,
+                            *read_data.time,
+                            dest_info,
+                            None,
+                        )),
+                    });
+                }
+                if matches!(
+                    physics_state.on_ground.and_then(|b| b.get_sprite()),
+                    Some(SpriteKind::EnsnaringWeb)
+                ) {
+                    // If on ensnaring web, apply ensnared debuff
                     emitters.emit(BuffEvent {
                         entity,
                         buff_change: BuffChange::Add(Buff::new(
@@ -204,7 +235,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 }
@@ -221,7 +253,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 }
@@ -251,7 +284,8 @@ impl<'a> System<'a> for Sys {
                                 Vec::new(),
                                 BuffSource::World,
                                 *read_data.time,
-                                Some(&stat),
+                                dest_info,
+                                None,
                             )),
                         });
                     }
@@ -269,7 +303,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 }
@@ -286,7 +321,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 }
@@ -303,7 +339,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                     // When standing on IceSpike also apply Frozen
@@ -315,7 +352,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 }
@@ -332,7 +370,8 @@ impl<'a> System<'a> for Sys {
                             Vec::new(),
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 }
@@ -353,7 +392,8 @@ impl<'a> System<'a> for Sys {
                             vec![BuffCategory::Natural],
                             BuffSource::World,
                             *read_data.time,
-                            Some(&stat),
+                            dest_info,
+                            None,
                         )),
                     });
                 } else if matches!(
@@ -429,7 +469,8 @@ impl<'a> System<'a> for Sys {
                                     .collect::<Vec<_>>(),
                                 buff.source,
                                 *read_data.time,
-                                Some(&stat),
+                                dest_info,
+                                None,
                             )),
                         });
                     }
@@ -679,7 +720,11 @@ fn execute_effect(
             },
         },
         BuffEffect::DamageReduction(dr) => {
-            stat.damage_reduction = 1.0 - ((1.0 - stat.damage_reduction) * (1.0 - *dr));
+            if *dr > 0.0 {
+                stat.damage_reduction.pos_mod = stat.damage_reduction.pos_mod.max(*dr);
+            } else {
+                stat.damage_reduction.neg_mod += dr;
+            }
         },
         BuffEffect::MaxHealthChangeOverTime {
             rate,
@@ -732,12 +777,18 @@ fn execute_effect(
         BuffEffect::AttackSpeed(speed) => {
             stat.attack_speed_modifier *= *speed;
         },
+        BuffEffect::RecoverySpeed(speed) => {
+            stat.recovery_speed_modifier *= *speed;
+        },
         BuffEffect::GroundFriction(gf) => {
             stat.friction_modifier *= *gf;
         },
-        #[allow(clippy::manual_clamp)]
         BuffEffect::PoiseReduction(pr) => {
-            stat.poise_reduction = stat.poise_reduction.max(*pr).min(1.0);
+            if *pr > 0.0 {
+                stat.poise_reduction.pos_mod = stat.poise_reduction.pos_mod.max(*pr);
+            } else {
+                stat.poise_reduction.neg_mod += pr;
+            }
         },
         BuffEffect::HealReduction(red) => {
             stat.heal_multiplier *= 1.0 - *red;
@@ -756,6 +807,13 @@ fn execute_effect(
             stat.precision_multiplier_override = stat
                 .precision_multiplier_override
                 .map(|mult| mult.min(*val))
+                .or(Some(*val));
+        },
+        BuffEffect::PrecisionVulnerabilityOverride(val) => {
+            // Use higher of precision multiplier overrides
+            stat.precision_vulnerability_multiplier_override = stat
+                .precision_vulnerability_multiplier_override
+                .map(|mult| mult.max(*val))
                 .or(Some(*val));
         },
         BuffEffect::BodyChange(b) => {
@@ -792,5 +850,10 @@ fn execute_effect(
             stat.energy_reward_modifier *= er;
         },
         BuffEffect::DamagedEffect(effect) => stat.effects_on_damaged.push(effect.clone()),
+        BuffEffect::DeathEffect(effect) => stat.effects_on_death.push(effect.clone()),
+        BuffEffect::DisableAuxiliaryAbilities => stat.disable_auxiliary_abilities = true,
+        BuffEffect::CrowdControlResistance(ccr) => {
+            stat.crowd_control_resistance += ccr;
+        },
     };
 }

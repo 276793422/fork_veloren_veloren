@@ -46,7 +46,6 @@ npc-speech-villager_adventurous =
     .a1 = Wenn ich stärker bin, würde ich gerne in einer Höhle erkunden gehen.
 npc-speech-villager_closed =
     .a0 = Du bist nicht von hier, oder?
-    .a1 = Findest du nicht auch, dass unser Dorf das beste ist?
     .a2 = Man sagt, Pilze seien gut für die Gesundheit. Ich habe sie noch nie probiert.
     .a3 = Sein oder nicht sein? Ich glaube, ich werde Bauer.
 npc-speech-villager_conscientious =
@@ -237,7 +236,7 @@ npc-speech-villager_under_attack =
 npc-speech-villager_enemy_killed =
     .a0 = Ich habe den Feind vernichtet!
     .a1 = Endlich Frieden!
-    .a2 = … also, wo war ich stehengeblieben?
+    .a2 = { "." }.. also, wo war ich stehengeblieben?
 npc-speech-menacing =
     .a0 = Ich warne dich!
     .a1 = Komm nicht näher oder ich greife an!
@@ -294,7 +293,7 @@ npc-speech-dir_north_west = Nordwesten
 # - $dist references npc-speech-dist-* variables below
 # - $site represents hard-coded site in the world
 npc-speech-tell_site =
-    .a0 = Warst du schonmal in { $site }? Es liegt nur im { $dir } von hier!
+    .a0 = Warst du schonmal in { $site }? Es liegt im { $dir } von hier!
     .a1 = Du solltest irgendwann einmal { $site } besuchen.
     .a2 = Wenn du { $dist } nach { $dir } gehst, gelangst du nach { $site }.
     .a3 = Nach { $dir } wirst du { $site } finden, es ist nur { $dist }.
@@ -359,3 +358,17 @@ npc-speech-guard_thought =
     .a0 = Mein Bruder ist unterwegs, gegen Ogre zu kämpfen. Was bleibt für mich? Wachdienst...
     .a1 = Nur noch eine Patrouille, dann kann ich nach Hause.
     .a2 = Kein Bandit kommt an mir vorbei.
+# NPC reactions
+npc-speech-night =
+    .a0 = Laternen sind nützlich, um nachts voranzukommen!
+    .a1 = Ich hoffe, wir sind alleine hier im Dunkeln ...
+    .a2 = Buu!
+# NPC site hints
+# Available variables:
+# - $dir references npc-speech-dir-* variables below
+# - $dist references npc-speech-dist-* variables below
+# - $site represents hard-coded site in the world
+npc-speech-site =
+    .a0 = Glaubst du nicht auch, dass unser Dorf das beste ist?
+    .a1 = Willkommen in { $site } !
+    .a2 = { $site } ist ein schönes Dorf zum Leben.

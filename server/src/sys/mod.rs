@@ -11,6 +11,7 @@ pub mod object;
 pub mod persistence;
 pub mod pets;
 pub mod sentinel;
+pub mod server_info;
 pub mod subscription;
 pub mod teleporter;
 pub mod terrain;
@@ -44,6 +45,7 @@ pub fn add_server_systems(dispatch_builder: &mut DispatcherBuilder) {
     // don't depend on chunk_serialize, as we assume everything is done in a SlowJow
     dispatch::<chunk_send::Sys>(dispatch_builder, &[]);
     dispatch::<item::Sys>(dispatch_builder, &[]);
+    dispatch::<server_info::Sys>(dispatch_builder, &[]);
 }
 
 pub fn run_sync_systems(ecs: &mut specs::World) {

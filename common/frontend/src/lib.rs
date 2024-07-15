@@ -27,6 +27,7 @@ const RUST_LOG_ENV: &str = "RUST_LOG";
 ///  - warn for `prometheus_hyper`, `dot_vox`, `gfx_device_gl::factory,
 ///    `gfx_device_gl::shade` trace for `veloren_voxygen`, info for everything
 ///    else
+///
 /// `RUST_LOG="prometheus_hyper=warn,dot_vox::parser=warn,gfx_device_gl::
 /// factory=warn,gfx_device_gl::shade=warn,veloren_voxygen=trace,info"`
 ///
@@ -75,6 +76,7 @@ where
         "refinery_core::traits::divergent=off",
         "veloren_server::persistence::character=info",
         "veloren_server::settings=info",
+        "veloren_query_server=info",
     ];
 
     for s in default_directives {
@@ -108,7 +110,9 @@ where
 
     // Create the terminal writer layer.
     #[cfg(feature = "tracy")]
-    let registry = registry.with(tracing_tracy::TracyLayer::new().with_stackdepth(0));
+    let registry = registry.with(tracing_tracy::TracyLayer::new(
+        tracing_tracy::DefaultConfig::default(),
+    ));
     #[cfg(not(feature = "tracy"))]
     let registry = {
         let (non_blocking, stdio_guard) = tracing_appender::non_blocking(terminal.make_writer());

@@ -32,7 +32,6 @@ pub struct StaticData {
     pub vertical_leap_strength: f32,
     /// What key is used to press ability
     pub ability_info: AbilityInfo,
-    ///
     pub damage_effect: Option<CombatEffect>,
 }
 
@@ -140,14 +139,22 @@ impl CharacterBehavior for Data {
                     );
 
                     update.character = CharacterState::LeapMelee(Data {
-                        timer: tick_attack_or_default(data, self.timer, None),
+                        timer: tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        ),
                         exhausted: true,
                         ..*self
                     });
                 } else if self.timer < self.static_data.recover_duration {
                     // Complete recovery delay before finishing state
                     update.character = CharacterState::LeapMelee(Data {
-                        timer: tick_attack_or_default(data, self.timer, None),
+                        timer: tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        ),
                         ..*self
                     });
                 } else {

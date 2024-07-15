@@ -6,7 +6,9 @@ use crate::{
         AdminRole as Role, Skill,
     },
     generation::try_all_entity_configs,
-    npc, terrain,
+    npc,
+    recipe::RecipeBookManifest,
+    terrain,
 };
 use hashbrown::HashMap;
 use lazy_static::lazy_static;
@@ -137,6 +139,10 @@ lazy_static! {
         .iter()
         .map(|o| o.to_string().to_string())
         .collect();
+    static ref RECIPES: Vec<String> = {
+        let rbm = RecipeBookManifest::load().cloned();
+        rbm.keys().cloned().collect::<Vec<String>>()
+    };
     static ref TIMES: Vec<String> = [
         "midnight", "night", "dawn", "morning", "day", "noon", "dusk"
     ]
@@ -188,7 +194,14 @@ lazy_static! {
             BuffKind::Defiance => "defiance",
             BuffKind::Bloodfeast => "bloodfeast",
             BuffKind::Berserk => "berserk",
-            BuffKind::Heatstroke => "heatstroke"
+            BuffKind::Heatstroke => "heatstroke",
+            BuffKind::ScornfulTaunt => "scornful_taunt",
+            BuffKind::Rooted => "rooted",
+            BuffKind::Winded => "winded",
+            BuffKind::Concussion => "concussion",
+            BuffKind::Staggered => "staggered",
+            BuffKind::Tenacity => "tenacity",
+            BuffKind::Resilience => "resilience",
         };
         let mut buff_parser = HashMap::new();
         for kind in BuffKind::iter() {
@@ -325,6 +338,7 @@ pub enum ServerChatCommand {
     Buff,
     Build,
     Campfire,
+    ClearPersistedTerrain,
     CreateLocation,
     DebugColumn,
     DebugWays,
@@ -370,6 +384,7 @@ pub enum ServerChatCommand {
     ReloadChunks,
     RemoveLights,
     RepairEquipment,
+    ResetRecipes,
     Respawn,
     RevokeBuild,
     RevokeBuildAll,
@@ -532,6 +547,11 @@ impl ServerChatCommand {
                 Some(Admin),
             ),
             ServerChatCommand::Campfire => cmd(vec![], "Spawns a campfire", Some(Admin)),
+            ServerChatCommand::ClearPersistedTerrain => cmd(
+                vec![Integer("chunk_radius", 6, Required)],
+                "Clears nearby persisted terrain",
+                Some(Admin),
+            ),
             ServerChatCommand::DebugColumn => cmd(
                 vec![Integer("x", 15000, Required), Integer("y", 15000, Required)],
                 "Prints some debug information about a column",
@@ -632,9 +652,11 @@ impl ServerChatCommand {
                 Some(Moderator),
             ),
             ServerChatCommand::Kill => cmd(vec![], "Kill yourself", None),
-            ServerChatCommand::KillNpcs => {
-                cmd(vec![Flag("--also-pets")], "Kill the NPCs", Some(Admin))
-            },
+            ServerChatCommand::KillNpcs => cmd(
+                vec![Float("radius", 100.0, Optional), Flag("--also-pets")],
+                "Kill the NPCs",
+                Some(Admin),
+            ),
             ServerChatCommand::Kit => cmd(
                 vec![Enum("kit_name", KITS.to_vec(), Required)],
                 "Place a set of items into your inventory.",
@@ -715,10 +737,11 @@ impl ServerChatCommand {
                 Some(Admin),
             ),
             ServerChatCommand::ReloadChunks => cmd(
-                vec![],
-                "Reloads all chunks loaded on the server",
+                vec![Integer("chunk_radius", 6, Optional)],
+                "Reloads chunks loaded on the server",
                 Some(Admin),
             ),
+            ServerChatCommand::ResetRecipes => cmd(vec![], "Resets your recipe book", Some(Admin)),
             ServerChatCommand::RemoveLights => cmd(
                 vec![Float("radius", 20.0, Optional)],
                 "Removes all lights spawned by players",
@@ -980,6 +1003,7 @@ impl ServerChatCommand {
             ServerChatCommand::Buff => "buff",
             ServerChatCommand::Build => "build",
             ServerChatCommand::Campfire => "campfire",
+            ServerChatCommand::ClearPersistedTerrain => "clear_persisted_terrain",
             ServerChatCommand::DebugColumn => "debug_column",
             ServerChatCommand::DebugWays => "debug_ways",
             ServerChatCommand::DisconnectAllPlayers => "disconnect_all_players",
@@ -1014,6 +1038,7 @@ impl ServerChatCommand {
             ServerChatCommand::PermitBuild => "permit_build",
             ServerChatCommand::Players => "players",
             ServerChatCommand::Portal => "portal",
+            ServerChatCommand::ResetRecipes => "reset_recipes",
             ServerChatCommand::Region => "region",
             ServerChatCommand::ReloadChunks => "reload_chunks",
             ServerChatCommand::RemoveLights => "remove_lights",

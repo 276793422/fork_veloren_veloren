@@ -32,6 +32,8 @@ impl Site {
             | SiteKind::ChapelSite(_)
             | SiteKind::Terracotta(_)
             | SiteKind::Gnarling(_)
+            | SiteKind::Cultist(_)
+            | SiteKind::Sahagin(_)
             | SiteKind::PirateHideout(_)
             | SiteKind::JungleRuin(_)
             | SiteKind::RockCircle(_)

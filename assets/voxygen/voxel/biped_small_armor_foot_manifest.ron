@@ -224,12 +224,12 @@
                 vox_spec: ("npc.irrwurz.male.foot_r", (-1.5, -2.5, -6.0)),
             )
         ),
-        "common.items.npc_armor.biped_small.clockwork.foot.clockwork": (
+        "common.items.npc_armor.biped_small.iron_dwarf.foot.iron_dwarf": (
             left: (
-                vox_spec: ("npc.clockwork.foot_r", (-2.5, -3.5, -7.0)),
+                vox_spec: ("npc.iron_dwarf.foot_r", (-2.5, -3.5, -7.0)),
             ),
             right: (
-                 vox_spec: ("npc.clockwork.foot_r", (-2.5, -3.5, -7.0)),
+                 vox_spec: ("npc.iron_dwarf.foot_r", (-2.5, -3.5, -7.0)),
             )
         ),
         "common.items.npc_armor.biped_small.flamekeeper.foot.flamekeeper": (
@@ -246,6 +246,14 @@
             ),
             right: (
                  vox_spec: ("npc.jiangshi.foot_r", (-2.0, -3.0, -8.0)),
+            )
+        ),
+        "common.items.npc_armor.biped_small.treasure_egg.foot.treasure_egg": (
+            left: (
+                vox_spec: ("npc.treasure_egg.male.foot_r", (-1.0, -1.5, -4.0)),
+            ),
+            right: (
+                vox_spec: ("npc.treasure_egg.male.foot_r", (-1.0, -1.5, -4.0)),
             )
         ),
     },

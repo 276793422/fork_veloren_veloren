@@ -110,11 +110,9 @@ impl CharacterBehavior for Data {
                 if !self.exhausted {
                     // Fire
                     let precision_mult = combat::compute_precision_mult(data.inventory, data.msm);
-                    let tool_stats = get_tool_stats(data, self.static_data.ability_info);
                     let projectile = self.static_data.projectile.create_projectile(
                         Some(*data.uid),
                         precision_mult,
-                        tool_stats,
                         self.static_data.damage_effect,
                     );
                     // Shoots all projectiles simultaneously
@@ -154,7 +152,11 @@ impl CharacterBehavior for Data {
                 } else if self.timer < self.static_data.recover_duration {
                     // Recovers
                     update.character = CharacterState::BasicRanged(Data {
-                        timer: tick_attack_or_default(data, self.timer, None),
+                        timer: tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        ),
                         ..*self
                     });
                 } else {

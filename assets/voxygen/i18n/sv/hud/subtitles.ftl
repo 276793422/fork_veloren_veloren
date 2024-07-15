@@ -143,3 +143,5 @@ subtitle-portal-teleported = Teleporterade via portal
 subtitle-instrument_shamisen = Shamisen spelas
 subtitle-utterance-phoenix-hurt = Fenix har ont
 subtitle-lavapool = Lavapool
+subtitle-surprise_egg = Gudomligt Ljud
+subtitle-bleep = Beep Bleep

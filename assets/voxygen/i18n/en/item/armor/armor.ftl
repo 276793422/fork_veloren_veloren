@@ -301,6 +301,12 @@ armor-misc-head-bandana-red = Red Bandana
 armor-misc-head-bandana-thief = Thief Bandana
     .desc = Common bandit's mask.
 
+armor-misc-head-hare_hat = Hare Hat
+    .desc = Easter Special
+
+armor-misc-head-cat_capuche = Cat Capuche
+    .desc = April Fools Special
+
 armor-misc-pants-grayscale = Hunting Pants
     .desc = Crafted from soft, supple leather.
 
@@ -384,6 +390,9 @@ armor-misc-ring-scratched = Scratched Ring
 
 armor-misc-ring-topaz = Topaz Ring
     .desc = A copper ring with a topaz gem.
+
+armor-misc-ring-abyssal_ring = Abyssal Ring
+    .desc = A pearl ring crudely held together with gold and coral.
 
 armor-misc-back-backpack-traveler = Traveler's Backpack
     .desc = Comfortable and with enough capacity, its a hoarder's best friend.
@@ -561,6 +570,9 @@ armor-mail-orichalcum-1 = Orichalcum Legplates
 
 armor-mail-orichalcum-5 = Orichalcum Mantle
     .desc = An ancient alloy. Myths remain of heroes who once wore this armor.
+
+armor-mail-orichalcum-7 = Orichalcum Helmet
+    .desc = The plume glows as you charge into battle.
 
 armor-mail-steel-back = Steel Cape
     .desc = Metal alloy interlocking plates to improve protection.

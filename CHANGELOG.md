@@ -1,11 +1,59 @@
 # Changelog
 
+<!--
+  Please, when documenting your changes in this changelog,
+  remember to end your sentences with periods when applicable.
+-->
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- Added reworked Cultist Dungeon
+- Petting animals tamed by you or someone else!
+- Updated furniture sprites.
+- Added Abyssal rings
+- Sprite models can now change depending on sprite attributes.
+- Dwarven-Mine update and activation.
+- Craftable orichalcum helmet
+- Protocol to query game server information (player count, version, etc.) and make ping tests.
+- Unlockable recipes
+
+### Changed
+
+- Fireworks and bombs are (again) available from chests (Sahagin and above).
+- Increased brinestone armor recipe cost and repair cost.
+- Hammer skill tree overhaul
+- Recipe for orichalcum ingots changed to use new alchemical ingredients
+- Refresh of voxel models for orichalcum armour
+- Toned down the health of most wild entities.
+- Rocksnapper received new abilities and AI
+- Rebalanced cultist dungeon loot tables; among other things, the drop Ankh of Life from Mindflayer is now 25x more frequent.
+- Improved Mindflayer anticheese measures.
+- Recipe pricing with NPCs.
+- Broad entity and loot updates to Gnarling Fortifications
+
+### Removed
+
+### Fixed
+
+- NPC path-finding, especially for merchants and travellers is now less dumb.
+- Moderate buff to wild large bipeds, to bring in line with other balancing
+- Loot protection for solo players and NPCs works again
+- New cultist dungeons are less overly abundant, sahagin dungeons spawn again.
+- Cultist dungeons now always have exactly one portal which leads to the boss room.
+- Prompt dialogs are now localized.
+- Image-export for wiki now produces correct images of items as they look like in-game.
+- Limit the minimum vertical scaling value in the world generation UI to 0.1 to prevent an overflow
+- Wood log and worker/linen clothing pricing.
+- Charm recipes can now be found in the Potions tab of the crafting menu
+
+## [0.16.0] - 2024-03-30
 
 ### Added
 
@@ -53,9 +101,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow moving and resizing the chat with left and right mouse button respectively.
 - Missing plugins are requested from the server and cached locally.
 - Support for adding spots in plugins.
-- Added real colours to LOD trees and rooftops, unique models for most tree kinds, and models for several buildings
-- `/aura` command
-- Friendly Fire and Forced PvP auras to desert city arenas
+- Added real colours to LOD trees and rooftops, unique models for most tree kinds, and models for several buildings.
+- `/aura` command.
+- Friendly Fire and Forced PvP auras to desert city arenas.
 
 ### Changed
 
@@ -105,6 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dropped items now merge dynamically (including non-stackables).
 - You no longer need to unlock health, energy and roll skills to get to max.
 - Rolls now don't skip recovery, and instead have increased buildup during ability interrupts.
+- Changed default world map.
 
 ### Removed
 
@@ -145,8 +194,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unlockable door blocks.
 - Sprite rotation for Spots.
 - Better entity placement options for spots.
-- Camera zoom can now be locked, to prevent accidental zooming while rolling in combat. It comes
-with a key bind to enable/disable the setting, and an Auto/Toggle behavior setting. Auto behavior
+- Camera zoom can now be locked, to prevent accidental zooming while rolling in combat.
+  It comes with a key bind to enable/disable the setting,
+  and an Auto/Toggle behavior setting. Auto behavior.
 will only lock the camera zoom while movement and combat inputs are also being pressed.
 - Custom spots can be added without recompilation (only ron and vox files).
 - Setting in userdata/server/server_config/settings.ron that controls the length of each day/night cycle.
@@ -189,9 +239,10 @@ will only lock the camera zoom while movement and combat inputs are also being p
 - Climbing no longer requires having 10 energy.
 - Castles will now be placed close to towns.
 - Sword skill tree overhaul.
-- Rescaling of images for the UI is now done when sampling from them on the GPU. Improvements are
-particularly noticeable when opening the map screen (which involves rescaling a few large
-images) and also when using the voxel minimap view (where a medium size image is updated often).
+- Rescaling of images for the UI is now done when sampling from them on the GPU.
+  Improvements are particularly noticeable when opening the map screen
+  (which involves rescaling a few large images) and also when using the voxel minimap view
+  (where a medium size image is updated often).
 - Towns now have a variety of sizes.
 - The game now starts in fullscreen by default.
 - Default audio volume should be less likely to destroy ear drums.
@@ -244,11 +295,13 @@ images) and also when using the voxel minimap view (where a medium size image is
 - Added a Craft All button.
 - Server: Vacuum database on startup.
 - SeaChapel, Greek/Latin inspired dungeon for ocean biome coasts.
-- Entity view distance setting added (shown in graphics and network tabs). This setting controls
-  the distance at which entities are synced to the client and which entities are displayed in.
+- Entity view distance setting added (shown in graphics and network tabs).
+  This setting controls the distance at which entities are synced to the client
+  and which entities are displayed in.
   This is clamped to be no more than the current overall view distance setting.
-- View distance settings that are lowered by the server limit (or other factors) now display an
-  extra ghost slider cursor when set above the limit (instead of snapping back to the limit).
+- View distance settings that are lowered by the server limit (or other factors)
+  now display an extra ghost slider cursor when set above the limit
+  (instead of snapping back to the limit).
   Limits on the view distance by the server no longer affect the settings saved on the client.
 - HQX upscaling shader for people playing on low internal resolutions.
 - Pets can now be traded with.
@@ -275,10 +328,9 @@ images) and also when using the voxel minimap view (where a medium size image is
 - First tab on Login screen triggers username focus.
 - Certain NPCs will now attack when alone with victim.
 - `/kill_npcs` no longer leaves drops behind and also has bug causing it to not destroy entities.
-  fixed.
 - Default present mode changed to FIFO (also known as 'Vsync capped').
-- Old "Entity View Distance" setting renamed to "Entity Detail Distance" (since this controls the
-  distance at which lower detail models are used for entities).
+- Old "Entity View Distance" setting renamed to "Entity Detail Distance"
+  (since this controls the distance at which lower detail models are used for entities).
 - Present mode options renamed for clarity: FIFO -> 'Vsync capped', Mailbox -> 'Vsync uncapped',
   Immediate -> 'Vsync off'.
 - Item pickup UI now displays items that members of your group pick up.
@@ -293,13 +345,14 @@ images) and also when using the voxel minimap view (where a medium size image is
 - Fixed bug where you would still be burning after dying in lava.
 - Workaround for rayon bug that caused lag spikes in slow jobs.
 - Fixed crash due to zooming out very far.
-- Client properly knows trade was cancelled when exiting to the character screen (and no longer
-  tries to display the trade window when rejoining).
-- Cancel trades for an entity when it is deleted (note this doesn't effect trades between players
-  since their entities are not removed).
-- Fixed bug where the view distance selection was not immediately applied to entity syncing when
-  first joining a server and when changing the view distance (previously this required moving to a
-  new chunk for the initial setting or subsequent change to apply).
+- Client properly knows trade was cancelled when exiting to the character screen
+  (and no longer tries to display the trade window when rejoining).
+- Cancel trades for an entity when it is deleted
+  (note this doesn't effect trades between players since their entities are not removed).
+- Fixed bug where the view distance selection was not immediately applied to entity
+  syncing when first joining a server and when changing the view distance
+  (previously this required moving to a new chunk for the initial setting or
+  subsequent change to apply).
 - Moderators and admins are no longer blocked from logging in when there are too many players.
 - FXAA now behaves correctly at non-1.0x internal resolutions.
 - Pets no longer aggro on pet owners after being healed.
@@ -363,8 +416,8 @@ images) and also when using the voxel minimap view (where a medium size image is
 - Damage from the same source dealt in the same tick will now be grouped up.
 - Critical hits are now shown differently in the damage numbers.
 - Fall damage and some (extra) buffs/debuffs now show up in the damage numbers.
-- Optimized sprite processing decreasing the startup time of voxygen (and long freezes when trying
-  to enter the world when this hasn't finished).
+- Optimized sprite processing decreasing the startup time of voxygen
+  (and long freezes when trying to enter the world when this hasn't finished).
 - Metadata added to music files. Listen to the soundtrack more easily!
 - Overhauled caves: they're now a multi-layer network spanning the entire world.
 
@@ -828,9 +881,9 @@ images) and also when using the voxel minimap view (where a medium size image is
 ### Fixed
 
 - Fixed a bug that would cause a server crash when a player levelled up or fired
-  a projectile in very specific circumstances
+  a projectile in very specific circumstances.
 - Fixed a bug where buff/debuff UI elements would flicker when you had more than
-  one of them active at the same time
+  one of them active at the same time.
 - Made zooming work on Wayland.
 - Fixed AI behavior so only humanoids will attempt to roll.
 - Fixed missing GameInputs (sneak, swimup, swimdown) in controller mapping.
@@ -1161,7 +1214,7 @@ images) and also when using the voxel minimap view (where a medium size image is
 - Added randomly selected Loading Screen background images.
 - Added options to disable clouds and to use cheaper water rendering.
 - Added client-side character saving.
-- Added a localization system to provide multi-language support to voxygen
+- Added a localization system to provide multi-language support to voxygen.
 - Added French language for Voxygen.
 - Added rivers and lakes which follow realistic physical paths.
 - Added a sophisticated erosion system for world generation which dramatically changes the world layout.
@@ -1296,7 +1349,8 @@ images) and also when using the voxel minimap view (where a medium size image is
 
 > Note: 0.1.0 was part of the legacy engine.
 
-[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.15.0&to=master
+[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.16.0&to=master
+[0.16.0]: https://gitlab.com/veloren/veloren/compare?from=v0.15.0&to=v0.16.0
 [0.15.0]: https://gitlab.com/veloren/veloren/compare?from=v0.14.0&to=v0.15.0
 [0.14.0]: https://gitlab.com/veloren/veloren/compare?from=v0.13.0&to=v0.14.0
 [0.13.0]: https://gitlab.com/veloren/veloren/compare?from=v0.12.0&to=v0.13.0

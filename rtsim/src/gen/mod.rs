@@ -229,15 +229,15 @@ impl Data {
             let site_kind = site.world_site.map(|ws| &index.sites.get(ws).kind);
             let Some(species) = [
                 Some(comp::body::bird_large::Species::Phoenix)
-                    .filter(|_| matches!(site_kind, Some(SiteKind::Dungeon(_)))),
+                    .filter(|_| matches!(site_kind, Some(SiteKind::DwarvenMine(_)))),
                 Some(comp::body::bird_large::Species::Cockatrice)
                     .filter(|_| matches!(site_kind, Some(SiteKind::Dungeon(_)))),
                 Some(comp::body::bird_large::Species::Roc)
-                    .filter(|_| matches!(site_kind, Some(SiteKind::Dungeon(_)))),
+                    .filter(|_| matches!(site_kind, Some(SiteKind::Haniwa(_)))),
                 Some(comp::body::bird_large::Species::FlameWyvern)
-                    .filter(|_| matches!(site_kind, Some(SiteKind::Dungeon(_)))),
+                    .filter(|_| matches!(site_kind, Some(SiteKind::Terracotta(_)))),
                 Some(comp::body::bird_large::Species::CloudWyvern)
-                    .filter(|_| matches!(site_kind, Some(SiteKind::Dungeon(_)))),
+                    .filter(|_| matches!(site_kind, Some(SiteKind::Sahagin(_)))),
                 Some(comp::body::bird_large::Species::FrostWyvern)
                     .filter(|_| matches!(site_kind, Some(SiteKind::Adlet(_)))),
                 Some(comp::body::bird_large::Species::SeaWyvern)
@@ -316,17 +316,7 @@ impl Data {
         // Try a few times to find a location that's not underwater
         if let Some((wpos, chunk)) = (0..100)
             .map(|_| world.sim().get_size().map(|sz| rng.gen_range(0..sz as i32)))
-            .find_map(|pos| {
-                Some((
-                    pos,
-                    world
-                        .sim()
-                        .get(pos)
-                // This is currently a workaround to force Frost Gigas spawning in cold areas
-                // TODO: Once more Gigas are implemented remove this
-                        .filter(|c| !c.is_underwater() && c.temp < CONFIG.snow_temp)?,
-                ))
-            })
+            .find_map(|pos| Some((pos, world.sim().get(pos).filter(|c| !c.is_underwater())?)))
             .map(|(pos, chunk)| {
                 let wpos2d = pos.cpos_to_wpos_center();
                 (

@@ -20,6 +20,9 @@ pub struct StaticData {
     pub max_range: f32,
     /// Miscellaneous information about the ability
     pub ability_info: AbilityInfo,
+    /// Used to indicate to the frontend what ability this is for any special
+    /// effects
+    pub frontend_specifier: Option<FrontendSpecifier>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -75,7 +78,11 @@ impl CharacterBehavior for Data {
                 if self.timer < self.static_data.recover_duration {
                     // Recovery
                     update.character = CharacterState::Blink(Data {
-                        timer: tick_attack_or_default(data, self.timer, None),
+                        timer: tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        ),
                         ..*self
                     });
                 } else {
@@ -91,4 +98,10 @@ impl CharacterBehavior for Data {
 
         update
     }
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FrontendSpecifier {
+    CultistFlame,
+    FlameThrower,
 }

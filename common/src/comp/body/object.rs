@@ -121,6 +121,11 @@ make_case_elim!(
         TerracottaStatue = 106,
         TerracottaDemolisherBomb = 107,
         BoltBesieger = 108,
+        SurpriseEgg = 109,
+        BubbleBomb = 110,
+        IronPikeBomb = 111,
+        Lavathrower = 112,
+        Scroll = 113,
     }
 );
 
@@ -131,7 +136,7 @@ impl Body {
     }
 }
 
-pub const ALL_OBJECTS: [Body; 109] = [
+pub const ALL_OBJECTS: [Body; 114] = [
     Body::Arrow,
     Body::Bomb,
     Body::Scarecrow,
@@ -241,6 +246,11 @@ pub const ALL_OBJECTS: [Body; 109] = [
     Body::Pebble,
     Body::TerracottaStatue,
     Body::BoltBesieger,
+    Body::SurpriseEgg,
+    Body::BubbleBomb,
+    Body::IronPikeBomb,
+    Body::Lavathrower,
+    Body::Scroll,
 ];
 
 impl From<Body> for super::Body {
@@ -347,6 +357,7 @@ impl Body {
             Body::AdletSpear => "adlet_spear",
             Body::AdletTrap => "adlet_trap",
             Body::Flamethrower => "flamethrower",
+            Body::Lavathrower => "lavathrower",
             Body::Mine => "mine",
             Body::LightningBolt => "lightning_bolt",
             Body::SpearIcicle => "spear_icicle",
@@ -359,6 +370,10 @@ impl Body {
             Body::Pebble => "pebble",
             Body::TerracottaStatue => "terracotta_statue",
             Body::BoltBesieger => "besieger_bolt",
+            Body::SurpriseEgg => "surprise_egg",
+            Body::BubbleBomb => "bubble_bomb",
+            Body::IronPikeBomb => "iron_pike_bomb",
+            Body::Scroll => "recipe",
         }
     }
 
@@ -390,13 +405,16 @@ impl Body {
             | Body::SpectralSwordLarge
             | Body::AdletSpear
             | Body::AdletTrap
-            | Body::Flamethrower => 500.0,
-            Body::Bomb | Body::Mine => 2000.0, // I have no idea what it's supposed to be
-            Body::Crate => 300.0,              // a lot of wood and maybe some contents
+            | Body::Flamethrower
+            | Body::Lavathrower => 500.0,
+            Body::Bomb | Body::Mine | Body::SurpriseEgg => 2000.0, /* I have no idea what it's */
+            // supposed to be
+            Body::Crate => 300.0, // a lot of wood and maybe some contents
             Body::Scarecrow => 900.0,
             Body::TrainingDummy => 2000.0,
             Body::Snowball => 0.9 * WATER_DENSITY,
             Body::Pebble => 1000.0,
+            Body::Scroll => 0.5 * WATER_DENSITY,
             // let them sink
             _ => 1.1 * WATER_DENSITY,
         };
@@ -423,9 +441,11 @@ impl Body {
             | Body::FireRainDrop
             | Body::ArrowClay
             | Body::Pebble
+            | Body::BubbleBomb
+            | Body::IronPikeBomb
             | Body::BoltBesieger => 1.0,
             Body::SpitPoison => 100.0,
-            Body::Bomb | Body::DagonBomb | Body::TerracottaDemolisherBomb => {
+            Body::Bomb | Body::DagonBomb | Body::SurpriseEgg | Body::TerracottaDemolisherBomb => {
                 0.5 * IRON_DENSITY * std::f32::consts::PI / 6.0 * self.dimensions().x.powi(3)
             },
             Body::Campfire | Body::CampfireLit | Body::BarrelOrgan | Body::TerracottaStatue => {
@@ -446,11 +466,11 @@ impl Body {
             | Body::ChestOpen
             | Body::ChestSkull
             | Body::ChestVines => 100.0,
-            Body::Coins => 1.0,
+            Body::Coins | Body::Scroll => 1.0,
             Body::CraftingBench => 100.0,
             Body::Crate => 50.0,
             Body::Crossbow => 200.0,
-            Body::Flamethrower => 200.0,
+            Body::Flamethrower | Body::Lavathrower => 200.0,
             Body::DoorSpooky => 20.0,
             Body::Drawer => 50.0,
             Body::FireworkBlue
@@ -519,6 +539,7 @@ impl Body {
             Body::SpectralSwordLarge => Vec3::new(0.2, 1.5, 0.1),
             Body::Crossbow => Vec3::new(3.0, 3.0, 1.5),
             Body::Flamethrower => Vec3::new(3.0, 3.0, 2.5),
+            Body::Lavathrower => Vec3::new(3.0, 3.0, 2.0),
             Body::HaniwaSentry => Vec3::new(0.8, 0.8, 1.4),
             Body::SeaLantern => Vec3::new(0.8, 0.8, 1.4),
             Body::Snowball => Vec3::broadcast(2.5),

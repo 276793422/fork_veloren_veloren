@@ -376,8 +376,8 @@ impl PlayState for MainMenuState {
                     let use_srv = net_settings.use_srv;
                     let use_quic = net_settings.use_quic;
                     let validate_tls = net_settings.validate_tls;
-                    net_settings.username = username.clone();
-                    net_settings.default_server = server_address.clone();
+                    net_settings.username.clone_from(&username);
+                    net_settings.default_server.clone_from(&server_address);
                     if !net_settings.servers.contains(&server_address) {
                         net_settings.servers.push(server_address.clone());
                     }
@@ -613,6 +613,16 @@ fn get_client_msg_error(
             Error::AuthClientError(e) => match e {
                 // TODO: remove parentheses
                 client::AuthClientError::RequestError(e) => format!(
+                    "{}: {}",
+                    localization.get_msg("main-login-failed_sending_request"),
+                    e
+                ),
+                client::AuthClientError::ResponseError(e) => format!(
+                    "{}: {}",
+                    localization.get_msg("main-login-failed_sending_request"),
+                    e
+                ),
+                client::AuthClientError::CertificateLoad(e) => format!(
                     "{}: {}",
                     localization.get_msg("main-login-failed_sending_request"),
                     e

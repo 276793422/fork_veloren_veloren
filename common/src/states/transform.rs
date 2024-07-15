@@ -21,6 +21,7 @@ use super::{
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FrontendSpecifier {
     Evolve,
+    Cursekeeper,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -94,6 +95,17 @@ impl CharacterBehavior for Data {
                                     },
                                 ))
                             },
+                            FrontendSpecifier::Cursekeeper => {
+                                output_events.emit_local(crate::event::LocalEvent::CreateOutcome(
+                                    crate::outcome::Outcome::Explosion {
+                                        pos: data.pos.0,
+                                        power: 5.0,
+                                        radius: 2.0,
+                                        is_attack: false,
+                                        reagent: Some(Reagent::Purple),
+                                    },
+                                ))
+                            },
                         }
                     }
 
@@ -114,7 +126,11 @@ impl CharacterBehavior for Data {
                 if self.timer < self.static_data.recover_duration {
                     update.character = CharacterState::Transform(Data {
                         static_data: self.static_data.clone(),
-                        timer: tick_attack_or_default(data, self.timer, None),
+                        timer: tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        ),
                         ..*self
                     });
                 } else {

@@ -12,15 +12,13 @@ use tracing::{debug, error, info, warn};
 use itertools::izip;
 use noise::NoiseFn;
 use num::{Float, Zero};
-use ordered_float::NotNan;
-#[cfg(feature = "simd")] use packed_simd::m32;
+use ordered_float::{FloatCore, NotNan};
 use rayon::prelude::*;
 use std::{
     cmp::{Ordering, Reverse},
     collections::BinaryHeap,
-    f32, fmt, mem,
+    fmt, mem,
     time::Instant,
-    u32,
 };
 use vek::*;
 
@@ -552,7 +550,7 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
 fn get_max_slope(
     map_size_lg: MapSizeLg,
     h: &[Alt],
-    rock_strength_nz: &(impl NoiseFn<[f64; 3]> + Sync),
+    rock_strength_nz: &(impl NoiseFn<f64, 3> + Sync),
     height_scale: impl Fn(usize) -> Alt + Sync,
 ) -> Box<[f64]> {
     let min_max_angle = (15.0 / 360.0 * 2.0 * std::f64::consts::PI).tan();
@@ -608,16 +606,17 @@ fn get_max_slope(
 // simd alternative
 #[cfg(not(feature = "simd"))]
 #[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
-struct m32(u32);
+struct M32(u32);
 #[cfg(not(feature = "simd"))]
-impl m32 {
+impl M32 {
     #[inline]
-    fn new(x: bool) -> Self { if x { Self(u32::MAX) } else { Self(u32::MIN) } }
+    fn splat(x: bool) -> Self { if x { Self(u32::MAX) } else { Self(u32::MIN) } }
 
     #[inline]
-    fn test(&self) -> bool { self.0 != 0 }
+    fn any(&self) -> bool { self.0 != 0 }
 }
+#[cfg(feature = "simd")]
+type M32 = std::simd::Mask<i32, 1>;
 
 /// Erode all chunks by amount.
 ///
@@ -630,8 +629,8 @@ impl m32 {
 ///
 ///   k = 2.244 * uplift.max() / (desired_max_height)
 ///
-///   since this tends to produce mountains of max height desired_max_height;
-/// and we set   desired_max_height = 1.0 to reflect limitations of mountain
+/// since this tends to produce mountains of max height desired_max_height;
+/// and we set desired_max_height = 1.0 to reflect limitations of mountain
 /// scale.
 ///
 /// This algorithm does this in four steps:
@@ -640,7 +639,7 @@ impl m32 {
 ///    the list, and the highest node by altitude is last).
 /// 2. Iterate through the list in *reverse.*  For each node, we compute its
 ///    drainage area as the sum of the drainage areas of its "children" nodes
-///    (i.e. the nodes with directed edges to this node).  To do this
+///    (i.e. the nodes with directed edges to this node). To do this
 ///    efficiently, we start with the "leaves" (the highest nodes), which have
 ///    no neighbors higher than them, hence no directed edges to them. We add
 ///    their area to themselves, and then to all neighbors that they flow into
@@ -663,9 +662,9 @@ impl m32 {
 ///    A[i]^m / ((p(i) - p(j)).magnitude()), and δt = 1):
 ///
 ///    h[i](t + dt) = h[i](t) + δt * (uplift[i] + flux(i) * h[j](t + δt)) / (1 +
-/// flux(i) * δt).
+///    flux(i) * δt).
 ///
-///    Since we compute heights in ascending order by height, and j is downhill
+/// Since we compute heights in ascending order by height, and j is downhill
 /// from i, h[j] will    always be the *new* h[j](t + δt), while h[i] will still
 /// not have been computed yet, so we    only need to visit each node once.
 ///
@@ -678,9 +677,9 @@ impl m32 {
 ///
 /// https://github.com/fastscape-lem/fastscapelib-fortran/blob/master/src/StreamPowerLaw.f90
 ///
-/// The  approximate equation for soil production function (predicting the rate
+/// The approximate equation for soil production function (predicting the rate
 /// at which bedrock turns into soil, increasing the distance between the
-/// basement and altitude) is taken from equation (11) from [2].  This (among
+/// basement and altitude) is taken from equation (11) from [2]. This (among
 /// numerous other sources) also includes at least one prediction that hillslope
 /// diffusion should be nonlinear, which we sort of attempt to approximate.
 ///
@@ -688,7 +687,7 @@ impl m32 {
 ///     Bedrich Benes, Eric Galin, et al..
 ///     Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion.
 ///     Computer Graphics Forum, Wiley, 2016, Proc. EUROGRAPHICS 2016, 35 (2),
-/// pp.165-175.     ⟨10.1111/cgf.12820⟩. ⟨hal-01262376⟩
+///     pp.165-175.     ⟨10.1111/cgf.12820⟩. ⟨hal-01262376⟩
 ///
 /// [2] William E. Dietrich, Dino G. Bellugi, Leonard S. Sklar,
 ///     Jonathan D. Stock
@@ -710,7 +709,7 @@ fn erode(
     max_g: f32,
     kdsed: f64,
     _seed: &RandomField,
-    rock_strength_nz: &(impl NoiseFn<[f64; 3]> + Sync),
+    rock_strength_nz: &(impl NoiseFn<f64, 3> + Sync),
     uplift: impl Fn(usize) -> f32 + Sync,
     n_f: impl Fn(usize) -> f32 + Sync,
     m_f: impl Fn(usize) -> f32 + Sync,
@@ -862,7 +861,7 @@ fn erode(
     let mid_slope = (30.0 / 360.0 * 2.0 * std::f64::consts::PI).tan();
 
     type SimdType = f32;
-    type MaskType = m32;
+    type MaskType = M32;
 
     // Precompute factors for Stream Power Law.
     let czero = <SimdType as Zero>::zero();
@@ -1254,7 +1253,7 @@ fn erode(
                     // Egress with no outgoing flows.
                     // wh for oceans is always at least min_erosion_height.
                     let uplift_i = uplift(posi) as Alt;
-                    wh[posi] = min_erosion_height.max(h_t_i + uplift_i);
+                    wh[posi] = FloatCore::max(min_erosion_height, h_t_i + uplift_i);
                     lake_sill[stacki] = posi as isize;
                     lake_water_volume[stacki] = 0.0;
                 } else {
@@ -1316,7 +1315,7 @@ fn erode(
                             let tolp = 1.0e-3;
                             let mut errp = 2.0 * tolp;
                             let mut rec_heights = [0.0; 8];
-                            let mut mask = [MaskType::new(false); 8];
+                            let mut mask = [MaskType::splat(false); 8];
                             mrec_downhill(map_size_lg, &mrec, posi).for_each(|(kk, posj)| {
                                 let posj_stack = mstack_inv[posj];
                                 let h_j = h_stack[posj_stack];
@@ -1324,7 +1323,7 @@ fn erode(
                                 // + uplift(posj) as f64
                                 // NOTE: We also considered using old_elev_i > wh[posj] here.
                                 if old_elev_i > h_j {
-                                    mask[kk] = MaskType::new(true);
+                                    mask[kk] = MaskType::splat(true);
                                     rec_heights[kk] = h_j as SimdType;
                                 }
                             });
@@ -1333,10 +1332,11 @@ fn erode(
                                 let mut df = 1.0;
                                 izip!(&mask, &rec_heights, k_fs_fact, k_df_fact).for_each(
                                     |(&mask_kk, &rec_heights_kk, &k_fs_fact_kk, &k_df_fact_kk)| {
-                                        if mask_kk.test() {
+                                        if mask_kk.any() {
                                             let h_j = rec_heights_kk;
                                             let elev_j = h_j;
-                                            let dh = 0.0.max(new_h_i as SimdType - elev_j);
+                                            let dh =
+                                                FloatCore::max(0.0, new_h_i as SimdType - elev_j);
                                             let powf = |a: SimdType, b| a.powf(b);
                                             let dh_fs_sample = k_fs_fact_kk as SimdType
                                                 * powf(dh, n as SimdType - 1.0);
@@ -1544,7 +1544,7 @@ fn erode(
                         // +max(0.d0,min(lake_sediment(lake_sill(ij)),
                         // lake_water_volume(lake_sill(ij))))/
                         // lake_water_volume(lake_sill(ij))*(water(ij)-h(ij))
-                        *h += (0.0.max(lake_silt[stacki].min(lake_water_volume[lposi]))
+                        *h += (FloatCore::max(0.0, lake_silt[stacki].min(lake_water_volume[lposi]))
                             / lake_water_volume[lposi]
                             * (wh[posi] - *h) as Compute) as Alt;
                     }
@@ -1614,7 +1614,7 @@ fn erode(
                 panic!("Disconnected lake!");
             }
             // wh for oceans is always at least min_erosion_height.
-            wh[posi] = min_erosion_height.max(old_h_i as Alt);
+            wh[posi] = FloatCore::max(min_erosion_height, old_h_i as Alt);
         } else {
             let posj = posj as usize;
             // Find the water height for this chunk's receiver; we only apply thermal
@@ -1819,7 +1819,7 @@ pub(crate) fn fill_sinks<F: Float + Send + Sync>(
 ///   adjacency list).
 /// - The adjacency list (stored in a single vector), indexed by the second
 ///   indirection vector.
-pub fn get_lakes<F: Float>(
+pub fn get_lakes<F: FloatCore>(
     map_size_lg: MapSizeLg,
     h: impl Fn(usize) -> F,
     downhill: &mut [isize],
@@ -2523,7 +2523,7 @@ pub fn do_erosion(
     _max_uplift: f32,
     n_steps: usize,
     seed: &RandomField,
-    rock_strength_nz: &(impl NoiseFn<[f64; 3]> + Sync),
+    rock_strength_nz: &(impl NoiseFn<f64, 3> + Sync),
     oldh: impl Fn(usize) -> f32 + Sync,
     oldb: impl Fn(usize) -> f32 + Sync,
     is_ocean: impl Fn(usize) -> bool + Sync,

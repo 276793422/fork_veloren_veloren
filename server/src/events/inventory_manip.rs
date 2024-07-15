@@ -23,9 +23,7 @@ use common::{
     },
     event_emitters,
     mounting::VolumePos,
-    recipe::{
-        self, default_component_recipe_book, default_recipe_book, default_repair_recipe_book,
-    },
+    recipe::{self, default_component_recipe_book, default_repair_recipe_book, RecipeBookManifest},
     resources::{ProgramTime, Time},
     terrain::{Block, SpriteKind},
     trade::Trades,
@@ -85,6 +83,7 @@ pub struct InventoryManipData<'a> {
     program_time: ReadExpect<'a, ProgramTime>,
     ability_map: ReadExpect<'a, AbilityMap>,
     msm: ReadExpect<'a, MaterialStatManifest>,
+    rbm: ReadExpect<'a, RecipeBookManifest>,
     inventories: WriteStorage<'a, comp::Inventory>,
     items: WriteStorage<'a, comp::PickupItem>,
     inventory_updates: WriteStorage<'a, comp::InventoryUpdate>,
@@ -107,6 +106,7 @@ pub struct InventoryManipData<'a> {
     agents: ReadStorage<'a, comp::Agent>,
     pets: ReadStorage<'a, comp::Pet>,
     velocities: ReadStorage<'a, comp::Vel>,
+    masses: ReadStorage<'a, comp::Mass>,
 }
 
 impl ServerEvent for InventoryManipEvent {
@@ -242,8 +242,7 @@ impl ServerEvent for InventoryManipEvent {
 
                     let (item, reinsert_item) = item.pick_up();
 
-                    // NOTE: We dup the item for message purposes.
-                    let item_msg = item.duplicate(&data.ability_map, &data.msm);
+                    let mut item_msg = item.frontend_item(&data.ability_map, &data.msm);
 
                     // Next, we try to equip the picked up item
                     let event = match inventory.try_equip(item).or_else(|returned_item| {
@@ -251,7 +250,7 @@ impl ServerEvent for InventoryManipEvent {
                         // attempt to add the item to the entity's inventory
                         inventory.pickup_item(returned_item)
                     }) {
-                        Err(returned_item) => {
+                        Err((returned_item, inserted)) => {
                             // If we had a `reinsert_item`, merge returned_item into it
                             let returned_item = if let Some(mut reinsert_item) = reinsert_item {
                                 reinsert_item
@@ -271,10 +270,39 @@ impl ServerEvent for InventoryManipEvent {
                             data.items
                                 .insert(item_entity, returned_item)
                                 .expect(ITEM_ENTITY_EXPECT_MESSAGE);
-                            comp::InventoryUpdate::new(InventoryUpdateEvent::EntityCollectFailed {
-                                entity: pickup_uid,
-                                reason: CollectFailedReason::InventoryFull,
-                            })
+
+                            // If the item was partially picked up, send a loot annoucement.
+                            if let Some(inserted) = inserted {
+                                // Update the frontend item to the new amount
+                                item_msg
+                                    .set_amount(inserted.get())
+                                    .expect("Inserted must be > 0 and <= item.max_amount()");
+
+                                if let Some(group_id) = data.groups.get(entity) {
+                                    announce_loot_to_group(
+                                        group_id,
+                                        entity,
+                                        item_msg.duplicate(&data.ability_map, &data.msm),
+                                        &data.clients,
+                                        &data.uids,
+                                        &data.groups,
+                                        &data.alignments,
+                                        &data.entities,
+                                        &data.ability_map,
+                                        &data.msm,
+                                    );
+                                }
+                                comp::InventoryUpdate::new(InventoryUpdateEvent::Collected(
+                                    item_msg,
+                                ))
+                            } else {
+                                comp::InventoryUpdate::new(
+                                    InventoryUpdateEvent::EntityCollectFailed {
+                                        entity: pickup_uid,
+                                        reason: CollectFailedReason::InventoryFull,
+                                    },
+                                )
+                            }
                         },
                         Ok(_) => {
                             // We succeeded in picking up the item, so we may now delete its old
@@ -334,33 +362,41 @@ impl ServerEvent for InventoryManipEvent {
                                 for item in
                                     flatten_counted_items(&items, &data.ability_map, &data.msm)
                                 {
-                                    // NOTE: We dup the item for message purposes.
-                                    let item_msg = item.duplicate(&data.ability_map, &data.msm);
-                                    match inventory.push(item) {
-                                        Ok(_) => {
-                                            if let Some(group_id) = data.groups.get(entity) {
-                                                announce_loot_to_group(
-                                                    group_id,
-                                                    entity,
-                                                    item_msg
-                                                        .duplicate(&data.ability_map, &data.msm),
-                                                    &data.clients,
-                                                    &data.uids,
-                                                    &data.groups,
-                                                    &data.alignments,
-                                                    &data.entities,
-                                                    &data.ability_map,
-                                                    &data.msm,
+                                    let mut item_msg =
+                                        item.frontend_item(&data.ability_map, &data.msm);
+                                    let do_announce = match inventory.push(item) {
+                                        Ok(_) => true,
+                                        Err((item, inserted)) => {
+                                            drop_items.push(item);
+                                            if let Some(inserted) = inserted {
+                                                // Update the amount of the frontend item
+                                                item_msg.set_amount(inserted.get()).expect(
+                                                    "Inserted must be > 0 and <= item.max_amount()",
                                                 );
+                                                true
+                                            } else {
+                                                false
                                             }
-                                            inventory_update
-                                                .push(InventoryUpdateEvent::Collected(item_msg));
                                         },
-                                        // The item we created was in some sense "fake" so it's safe
-                                        // to drop it.
-                                        Err(_) => {
-                                            drop_items.push(item_msg);
-                                        },
+                                    };
+
+                                    if do_announce {
+                                        if let Some(group_id) = data.groups.get(entity) {
+                                            announce_loot_to_group(
+                                                group_id,
+                                                entity,
+                                                item_msg.duplicate(&data.ability_map, &data.msm),
+                                                &data.clients,
+                                                &data.uids,
+                                                &data.groups,
+                                                &data.alignments,
+                                                &data.entities,
+                                                &data.ability_map,
+                                                &data.msm,
+                                            );
+                                        }
+                                        inventory_update
+                                            .push(InventoryUpdateEvent::Collected(item_msg));
                                     }
                                 }
                             }
@@ -374,6 +410,9 @@ impl ServerEvent for InventoryManipEvent {
                                 Some(SpriteKind::Keyhole) => Some(SpriteKind::KeyDoor),
                                 Some(SpriteKind::BoneKeyhole) => Some(SpriteKind::BoneKeyDoor),
                                 Some(SpriteKind::HaniwaKeyhole) => Some(SpriteKind::HaniwaKeyDoor),
+                                Some(SpriteKind::SahaginKeyhole) => {
+                                    Some(SpriteKind::SahaginKeyDoor)
+                                },
                                 Some(SpriteKind::GlassKeyhole) => Some(SpriteKind::GlassBarrier),
                                 Some(SpriteKind::KeyholeBars) => Some(SpriteKind::DoorBars),
                                 Some(SpriteKind::TerracottaKeyhole) => {
@@ -570,6 +609,25 @@ impl ServerEvent for InventoryManipEvent {
 
                                         Some(InventoryUpdateEvent::Used)
                                     },
+                                    ItemKind::RecipeGroup { .. } => {
+                                        match inventory.push_recipe_group(item) {
+                                            Ok(()) => {
+                                                if let Some(client) = data.clients.get(entity) {
+                                                    client.send_fallible(
+                                                        ServerGeneral::UpdateRecipes,
+                                                    );
+                                                }
+                                                Some(InventoryUpdateEvent::Used)
+                                            },
+                                            Err(item) => {
+                                                inventory.insert_or_stack_at(slot, item).expect(
+                                                    "slot was just vacated of item, so it \
+                                                     definitely fits there.",
+                                                );
+                                                None
+                                            },
+                                        }
+                                    },
                                     _ => {
                                         inventory.insert_or_stack_at(slot, item).expect(
                                             "slot was just vacated of item, so it definitely fits \
@@ -627,6 +685,8 @@ impl ServerEvent for InventoryManipEvent {
                                         &data.msm,
                                         data.character_states.get(entity),
                                         data.stats.get(entity),
+                                        data.masses.get(entity),
+                                        None,
                                     );
                                 }
                             },
@@ -642,6 +702,8 @@ impl ServerEvent for InventoryManipEvent {
                                         &data.msm,
                                         data.character_states.get(entity),
                                         data.stats.get(entity),
+                                        data.masses.get(entity),
+                                        None,
                                     );
                                 }
                             },
@@ -656,6 +718,8 @@ impl ServerEvent for InventoryManipEvent {
                                     &data.msm,
                                     data.character_states.get(entity),
                                     data.stats.get(entity),
+                                    data.masses.get(entity),
+                                    None,
                                 );
                             },
                         }
@@ -815,7 +879,6 @@ impl ServerEvent for InventoryManipEvent {
                 } => {
                     use comp::controller::CraftEvent;
                     use recipe::ComponentKey;
-                    let recipe_book = default_recipe_book().read();
 
                     let get_craft_sprite = |sprite_pos: Option<VolumePos>| {
                         sprite_pos
@@ -856,32 +919,38 @@ impl ServerEvent for InventoryManipEvent {
                             recipe,
                             slots,
                             amount,
-                        } => recipe_book
-                            .get(&recipe)
-                            .filter(|r| {
-                                if let Some(needed_sprite) = r.craft_sprite {
-                                    let sprite = get_craft_sprite(craft_sprite);
-                                    Some(needed_sprite) == sprite
-                                } else {
-                                    true
-                                }
-                            })
-                            .and_then(|r| {
+                        } => {
+                            let filtered_recipe = inventory
+                                .get_recipe(&recipe, &data.rbm)
+                                .cloned()
+                                .filter(|r| {
+                                    if let Some(needed_sprite) = r.craft_sprite {
+                                        let sprite = get_craft_sprite(craft_sprite);
+                                        Some(needed_sprite) == sprite
+                                    } else {
+                                        true
+                                    }
+                                });
+                            if let Some(recipe) = filtered_recipe {
                                 let items = (0..amount)
                                     .filter_map(|_| {
-                                        r.craft_simple(
-                                            &mut inventory,
-                                            slots.clone(),
-                                            &data.ability_map,
-                                            &data.msm,
-                                        )
-                                        .ok()
+                                        recipe
+                                            .craft_simple(
+                                                &mut inventory,
+                                                slots.clone(),
+                                                &data.ability_map,
+                                                &data.msm,
+                                            )
+                                            .ok()
                                     })
                                     .flatten()
                                     .collect::<Vec<_>>();
 
                                 if items.is_empty() { None } else { Some(items) }
-                            }),
+                            } else {
+                                None
+                            }
+                        },
                         CraftEvent::Salvage(slot) => {
                             let sprite = get_craft_sprite(craft_sprite);
                             if matches!(sprite, Some(SpriteKind::DismantlingBench)) {
@@ -935,12 +1004,14 @@ impl ServerEvent for InventoryManipEvent {
                                         modifier: modifier.and_then(item_id),
                                     })
                                     .filter(|r| {
-                                        if let Some(needed_sprite) = r.craft_sprite {
+                                        let sprite = if let Some(needed_sprite) = r.craft_sprite {
                                             let sprite = get_craft_sprite(craft_sprite);
                                             Some(needed_sprite) == sprite
                                         } else {
                                             true
-                                        }
+                                        };
+                                        let known = inventory.recipe_is_known(&r.recipe_book_key);
+                                        sprite && known
                                     })
                                     .and_then(|r| {
                                         r.craft_component(
@@ -978,7 +1049,7 @@ impl ServerEvent for InventoryManipEvent {
                     let items_were_crafted = if let Some(crafted_items) = crafted_items {
                         let mut dropped: Vec<PickupItem> = Vec::new();
                         for item in crafted_items {
-                            if let Err(item) = inventory.push(item) {
+                            if let Err((item, _inserted)) = inventory.push(item) {
                                 let item = PickupItem::new(item, *data.program_time);
                                 if let Some(can_merge) =
                                     dropped.iter_mut().find(|other| other.can_merge(&item))
@@ -1065,7 +1136,7 @@ impl ServerEvent for InventoryManipEvent {
                 vel: comp::Vel(vel),
                 body: match kind {
                     item::Throwable::Bomb => comp::object::Body::Bomb,
-                    item::Throwable::Mine => comp::object::Body::Mine,
+                    item::Throwable::SurpriseEgg => comp::object::Body::SurpriseEgg,
                     item::Throwable::Firework(reagent) => comp::object::Body::for_firework(reagent),
                     item::Throwable::TrainingDummy => comp::object::Body::TrainingDummy,
                 },
@@ -1075,7 +1146,9 @@ impl ServerEvent for InventoryManipEvent {
                         owner: Some(owner),
                         reagent,
                     }),
-                    item::Throwable::Mine => Some(comp::Object::Bomb { owner: Some(owner) }),
+                    item::Throwable::SurpriseEgg => {
+                        Some(comp::Object::SurpriseEgg { owner: Some(owner) })
+                    },
                     item::Throwable::TrainingDummy => None,
                 },
                 light_emitter: match kind {
@@ -1114,7 +1187,7 @@ fn within_pickup_range<S: FindDist<find_dist::Cylinder>>(
 fn announce_loot_to_group(
     group_id: &Group,
     entity: EcsEntity,
-    item: comp::Item,
+    item: comp::FrontendItem,
     clients: &ReadStorage<Client>,
     uids: &ReadStorage<Uid>,
     groups: &ReadStorage<comp::Group>,

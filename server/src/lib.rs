@@ -41,7 +41,7 @@ pub mod sys;
 pub mod terrain_persistence;
 #[cfg(not(feature = "worldgen"))] mod test_world;
 
-mod weather;
+#[cfg(feature = "worldgen")] mod weather;
 
 pub mod wiring;
 
@@ -73,6 +73,8 @@ use crate::{
 use censor::Censor;
 #[cfg(not(feature = "worldgen"))]
 use common::grid::Grid;
+#[cfg(feature = "worldgen")]
+use common::terrain::TerrainChunkSize;
 use common::{
     assets::AssetExt,
     calendar::Calendar,
@@ -90,7 +92,8 @@ use common::{
     rtsim::RtSimEntity,
     shared_server_config::ServerConstants,
     slowjob::SlowJobPool,
-    terrain::{TerrainChunk, TerrainChunkSize},
+    terrain::TerrainChunk,
+    util::GIT_DATE_TIMESTAMP,
     vol::RectRasterableVol,
 };
 use common_base::prof_span;
@@ -108,24 +111,22 @@ use persistence::{
     character_updater::CharacterUpdater,
 };
 use prometheus::Registry;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use specs::{
     shred::SendDispatcher, Builder, Entity as EcsEntity, Entity, Join, LendJoin, WorldExt,
 };
 use std::{
-    i32,
     ops::{Deref, DerefMut},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+#[cfg(not(feature = "worldgen"))]
+use test_world::{IndexOwned, World};
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, trace, warn};
 use vek::*;
+use veloren_query_server::server::QueryServer;
 pub use world::{civ::WorldCivStage, sim::WorldSimStage, WorldGenerateStage};
-#[cfg(not(feature = "worldgen"))]
-use {
-    common_net::msg::WorldMapMsg,
-    test_world::{IndexOwned, World},
-};
 
 use crate::{
     persistence::{DatabaseSettings, SqlLogMode},
@@ -146,7 +147,7 @@ use crate::{chat::ChatCache, persistence::character_loader::CharacterScreenRespo
 use common::comp::Anchor;
 #[cfg(feature = "worldgen")]
 pub use world::{
-    sim::{FileOpts, GenOpts, WorldOpts, DEFAULT_WORLD_MAP},
+    sim::{FileOpts, GenOpts, WorldOpts, DEFAULT_WORLD_MAP, DEFAULT_WORLD_SEED},
     IndexOwned, World,
 };
 
@@ -275,6 +276,7 @@ impl Server {
         let tick_metrics = TickMetrics::new(&registry).unwrap();
         let physics_metrics = PhysicsMetrics::new(&registry).unwrap();
         let server_event_metrics = metrics::ServerEventMetrics::new(&registry).unwrap();
+        let query_server_metrics = metrics::QueryServerMetrics::new(&registry).unwrap();
 
         let battlemode_buffer = BattleModeBuffer::default();
 
@@ -308,7 +310,7 @@ impl Server {
         #[cfg(feature = "worldgen")]
         let map = world.get_map_data(index.as_index_ref(), &pools);
         #[cfg(not(feature = "worldgen"))]
-        let map = WorldMapMsg {
+        let map = common_net::msg::WorldMapMsg {
             dimensions_lg: Vec2::zero(),
             max_height: 1.0,
             rgba: Grid::new(Vec2::new(1, 1), 1),
@@ -320,16 +322,18 @@ impl Server {
             default_chunk: Arc::new(world.generate_oob_chunk()),
         };
 
+        #[cfg(feature = "worldgen")]
+        let map_size_lg = world.sim().map_size_lg();
+        #[cfg(not(feature = "worldgen"))]
+        let map_size_lg = world.map_size_lg();
+
         let lod = lod::Lod::from_world(&world, index.as_index_ref(), &pools);
 
         report_stage(ServerInitStage::StartingSystems);
 
         let mut state = State::server(
             Arc::clone(&pools),
-            #[cfg(feature = "worldgen")]
-            world.sim().map_size_lg(),
-            #[cfg(not(feature = "worldgen"))]
-            common::terrain::map::MapSizeLg::new(Vec2::one()).unwrap(),
+            map_size_lg,
             Arc::clone(&map.default_chunk),
             |dispatcher_builder| {
                 add_local_systems(dispatcher_builder);
@@ -375,6 +379,7 @@ impl Server {
         state.ecs_mut().insert(tick_metrics);
         state.ecs_mut().insert(physics_metrics);
         state.ecs_mut().insert(server_event_metrics);
+        state.ecs_mut().insert(query_server_metrics);
         if settings.experimental_terrain_persistence {
             #[cfg(feature = "persistent_world")]
             {
@@ -423,6 +428,9 @@ impl Server {
 
         let msm = comp::inventory::item::MaterialStatManifest::load().cloned();
         state.ecs_mut().insert(msm);
+
+        let rbm = common::recipe::RecipeBookManifest::load().cloned();
+        state.ecs_mut().insert(rbm);
 
         state.ecs_mut().insert(CharacterLoader::new(
             Arc::<RwLock<DatabaseSettings>>::clone(&database_settings),
@@ -494,7 +502,7 @@ impl Server {
             #[cfg(feature = "worldgen")]
             let size = world.sim().get_size();
             #[cfg(not(feature = "worldgen"))]
-            let size = Vec2::new(40, 40);
+            let size = world.map_size_lg().chunks().map(u32::from);
 
             let world_size = size.map(|e| e as i32) * TerrainChunk::RECT_SIZE.map(|e| e as i32);
             let world_aabb = Aabb {
@@ -545,28 +553,40 @@ impl Server {
                     match || -> Result<_, Box<dyn std::error::Error>> {
                         let key = fs::read(key_file_path)?;
                         let key = if key_file_path.extension().map_or(false, |x| x == "der") {
-                            rustls::PrivateKey(key)
+                            PrivateKeyDer::try_from(key).map_err(|_| "No valid pem key in file")?
                         } else {
                             debug!("convert pem key to der");
-                            let key = rustls_pemfile::read_all(&mut key.as_slice())?
-                                .into_iter()
+                            rustls_pemfile::read_all(&mut key.as_slice())
                                 .find_map(|item| match item {
-                                    Item::RSAKey(v) | Item::PKCS8Key(v) => Some(v),
-                                    Item::ECKey(_) => None,
-                                    Item::X509Certificate(_) => None,
-                                    _ => None,
+                                    Ok(Item::Pkcs1Key(v)) => Some(PrivateKeyDer::Pkcs1(v)),
+                                    Ok(Item::Pkcs8Key(v)) => Some(PrivateKeyDer::Pkcs8(v)),
+                                    Ok(Item::Sec1Key(v)) => Some(PrivateKeyDer::Sec1(v)),
+                                    Ok(Item::Crl(_)) => None,
+                                    Ok(Item::Csr(_)) => None,
+                                    Ok(Item::X509Certificate(_)) => None,
+                                    Ok(_) => None,
+                                    Err(e) => {
+                                        tracing::warn!(?e, "error while reading key_file");
+                                        None
+                                    },
                                 })
-                                .ok_or("No valid pem key in file")?;
-                            rustls::PrivateKey(key)
+                                .ok_or("No valid pem key in file")?
                         };
                         let cert_chain = fs::read(cert_file_path)?;
                         let cert_chain = if cert_file_path.extension().map_or(false, |x| x == "der")
                         {
-                            vec![rustls::Certificate(cert_chain)]
+                            vec![CertificateDer::from(cert_chain)]
                         } else {
                             debug!("convert pem cert to der");
-                            let certs = rustls_pemfile::certs(&mut cert_chain.as_slice())?;
-                            certs.into_iter().map(rustls::Certificate).collect()
+                            rustls_pemfile::certs(&mut cert_chain.as_slice())
+                                .filter_map(|item| match item {
+                                    Ok(cert) => Some(cert),
+                                    Err(e) => {
+                                        tracing::warn!(?e, "error while reading cert_file");
+                                        None
+                                    },
+                                })
+                                .collect()
                         };
                         let server_config = quinn::ServerConfig::with_single_cert(cert_chain, key)?;
                         Ok(server_config)
@@ -594,6 +614,32 @@ impl Server {
                     }
                 },
             }
+        }
+
+        if let Some(addr) = settings.query_address {
+            use veloren_query_server::proto::ServerInfo;
+
+            const QUERY_SERVER_RATELIMIT: u16 = 120;
+
+            let (query_server_info_tx, query_server_info_rx) =
+                tokio::sync::watch::channel(ServerInfo {
+                    git_hash: *sys::server_info::GIT_HASH,
+                    git_timestamp: *GIT_DATE_TIMESTAMP,
+                    players_count: 0,
+                    player_cap: settings.max_players,
+                    battlemode: settings.gameplay.battle_mode.into(),
+                });
+            let mut query_server =
+                QueryServer::new(addr, query_server_info_rx, QUERY_SERVER_RATELIMIT);
+            let query_server_metrics =
+                Arc::new(Mutex::new(veloren_query_server::server::Metrics::default()));
+            let query_server_metrics2 = Arc::clone(&query_server_metrics);
+            runtime.spawn(async move {
+                let err = query_server.run(query_server_metrics2).await.err();
+                error!(?err, "Query server stopped unexpectedly");
+            });
+            state.ecs_mut().insert(query_server_info_tx);
+            state.ecs_mut().insert(query_server_metrics);
         }
 
         runtime.block_on(network.listen(ListenAddr::Mpsc(14004)))?;

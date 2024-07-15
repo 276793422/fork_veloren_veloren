@@ -16,8 +16,9 @@ use common_net::{
 };
 use hashbrown::{hash_map::Entry, HashMap};
 use specs::{world::WorldExt, Entity as EcsEntity};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, num::NonZeroU32};
 use tracing::{error, trace};
+#[cfg(feature = "worldgen")]
 use world::IndexOwned;
 
 pub fn notify_agent_simple(
@@ -30,6 +31,7 @@ pub fn notify_agent_simple(
     }
 }
 
+#[cfg(feature = "worldgen")]
 fn notify_agent_prices(
     mut agents: specs::WriteStorage<Agent>,
     index: &IndexOwned,
@@ -104,7 +106,10 @@ pub(super) fn handle_process_trade_action(
                 } else {
                     let mut entities: [Option<specs::Entity>; 2] = [None, None];
                     let mut inventories: [Option<ReducedInventory>; 2] = [None, None];
+                    #[cfg(feature = "worldgen")]
                     let mut prices = None;
+                    #[cfg(not(feature = "worldgen"))]
+                    let prices = None;
                     let agents = server.state.ecs().read_storage::<Agent>();
                     // sadly there is no map and collect on arrays
                     for i in 0..2 {
@@ -375,13 +380,14 @@ fn commit_trade(ecs: &specs::World, trade: &PendingTrade) -> TradeResult {
     let msm = ecs.read_resource::<MaterialStatManifest>();
     for who in [0, 1].iter().cloned() {
         for (slot, quantity) in trade.offers[who].iter() {
-            // Take the items one by one, to benefit from Inventory's stack handling
-            for _ in 0..*quantity {
-                inventories
+            if let Some(quantity) = NonZeroU32::new(*quantity) {
+                if let Some(item) = inventories
                     .get_mut(entities[who])
                     .expect(invmsg)
-                    .take(*slot, &ability_map, &msm)
-                    .map(|item| items[who].push(item));
+                    .take_amount(*slot, quantity, &ability_map, &msm)
+                {
+                    items[who].push(item);
+                }
             }
         }
     }

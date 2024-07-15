@@ -1,3 +1,4 @@
+#![allow(non_local_definitions)] // because of WidgetCommon derive
 mod animation;
 mod bag;
 mod buffs;
@@ -102,12 +103,13 @@ use common::{
         loot_owner::LootOwnerKind,
         pet::is_mountable,
         skillset::{skills::Skill, SkillGroupKind, SkillsPersistenceError},
-        BuffData, BuffKind, Health, Item, MapMarkerChange, PickupItem, PresenceKind,
+        BuffData, BuffKind, Content, Health, Item, MapMarkerChange, PickupItem, PresenceKind,
     },
     consts::MAX_PICKUP_RANGE,
     link::Is,
     mounting::{Mount, Rider, VolumePos},
     outcome::Outcome,
+    recipe::RecipeBookManifest,
     resources::{ProgramTime, Secs, Time},
     slowjob::SlowJobPool,
     terrain::{SpriteKind, TerrainChunk, UnlockKind},
@@ -1514,26 +1516,30 @@ impl Hud {
                 if let Some(persistence_error) = info.persistence_load_error {
                     let persistence_error = match persistence_error {
                         SkillsPersistenceError::HashMismatch => {
-                            "There was a difference detected in one of your skill groups since you \
-                             last played."
+                            "hud-skill-persistence-hash_mismatch"
                         },
                         SkillsPersistenceError::DeserializationFailure => {
-                            "There was a error in loading some of your skills from the database."
+                            "hud-skill-persistence-deserialization_failure"
                         },
                         SkillsPersistenceError::SpentExpMismatch => {
-                            "The amount of free experience you had in one of your skill groups \
-                             differed from when you last played."
+                            "hud-skill-persistence-spent_experience_missing"
                         },
                         SkillsPersistenceError::SkillsUnlockFailed => {
-                            "Your skills were not able to be obtained in the same order you \
-                             acquired them. Prerequisites or costs may have changed."
+                            "hud-skill-persistence-skills_unlock_failed"
                         },
                     };
+                    let persistence_error = global_state
+                        .i18n
+                        .read()
+                        .get_content(&Content::localized(persistence_error));
 
-                    let common_message = "Some of your skill points have been reset. You will \
-                                          need to reassign them.";
+                    let common_message = global_state
+                        .i18n
+                        .read()
+                        .get_content(&Content::localized("hud-skill-persistence-common_message"));
 
                     warn!("{}\n{}", persistence_error, common_message);
+                    // TODO: Let the player see the more detailed message `persistence_error`?
                     let prompt_dialog = PromptDialogSettings::new(
                         format!("{}\n", common_message),
                         Event::AcknowledgePersistenceLoadError,
@@ -2465,38 +2471,48 @@ impl Hud {
                             ]
                         },
                         Some(comp::Alignment::Owned(owner))
-                            if Some(*owner) == client.uid()
-                                && dist_sqr < common::consts::MAX_MOUNT_RANGE.powi(2) =>
+                            if dist_sqr < common::consts::MAX_MOUNT_RANGE.powi(2) =>
                         {
                             let mut options = Vec::new();
                             if is_mount.is_none() {
-                                options.push((
-                                    GameInput::Trade,
-                                    i18n.get_msg("hud-trade").to_string(),
-                                ));
-                                if !client.is_riding()
-                                    && is_mountable(body, bodies.get(client.entity()))
-                                {
+                                if Some(*owner) == client.uid() {
                                     options.push((
-                                        GameInput::Mount,
-                                        i18n.get_msg("hud-mount").to_string(),
+                                        GameInput::Trade,
+                                        i18n.get_msg("hud-trade").to_string(),
+                                    ));
+                                    if !client.is_riding()
+                                        && is_mountable(body, bodies.get(client.entity()))
+                                    {
+                                        options.push((
+                                            GameInput::Mount,
+                                            i18n.get_msg("hud-mount").to_string(),
+                                        ));
+                                    }
+
+                                    let is_staying = character_activity
+                                        .map_or(false, |activity| activity.is_pet_staying);
+
+                                    options.push((
+                                        GameInput::StayFollow,
+                                        i18n.get_msg(if is_staying {
+                                            "hud-follow"
+                                        } else {
+                                            "hud-stay"
+                                        })
+                                        .to_string(),
                                     ));
                                 }
 
-                                let is_staying = character_activity
-                                    .map_or(false, |activity| activity.is_pet_staying);
-
+                                // Anyone can pet a tamed animal
                                 options.push((
-                                    GameInput::StayFollow,
-                                    i18n.get_msg(if is_staying {
-                                        "hud-follow"
-                                    } else {
-                                        "hud-stay"
-                                    })
-                                    .to_string(),
+                                    GameInput::Interact,
+                                    i18n.get_msg("hud-pet").to_string(),
                                 ));
                             }
                             options
+                        },
+                        Some(comp::Alignment::Tame) => {
+                            vec![(GameInput::Interact, i18n.get_msg("hud-pet").to_string())]
                         },
                         _ => Vec::new(),
                     },
@@ -3127,6 +3143,7 @@ impl Hud {
         let entity = info.viewpoint_entity;
         let healths = ecs.read_storage::<Health>();
         let inventories = ecs.read_storage::<comp::Inventory>();
+        let rbm = ecs.read_resource::<RecipeBookManifest>();
         let energies = ecs.read_storage::<comp::Energy>();
         let skillsets = ecs.read_storage::<comp::SkillSet>();
         let active_abilities = ecs.read_storage::<comp::ActiveAbilities>();
@@ -3191,6 +3208,7 @@ impl Hud {
                 combo,
                 char_states.get(entity),
                 stance,
+                stats.get(entity),
             )
             .set(self.ids.skillbar, ui_widgets)
             {
@@ -3365,6 +3383,7 @@ impl Hud {
                     &mut self.slot_manager,
                     &self.item_imgs,
                     inventory,
+                    &rbm,
                     &msm,
                     tooltip_manager,
                     &mut self.show,
@@ -3716,11 +3735,13 @@ impl Hud {
                     &self.item_imgs,
                     &self.fonts,
                     i18n,
+                    &self.item_i18n,
                     &self.rot_imgs,
                     tooltip_manager,
                     &mut self.slot_manager,
                     self.pulse,
                     &context,
+                    stats.get(entity),
                 )
                 .set(self.ids.diary, ui_widgets)
                 {
@@ -5243,6 +5264,7 @@ pub fn get_buff_image(buff: BuffKind, imgs: &Imgs) -> conrod_core::image::Id {
         BuffKind::Flame => imgs.buff_flame,
         BuffKind::Frigid => imgs.buff_frigid,
         BuffKind::Lifesteal => imgs.buff_lifesteal,
+        BuffKind::Resilience => imgs.buff_resilience,
         // TODO: Get image
         // BuffKind::SalamanderAspect => imgs.debuff_burning_0,
         BuffKind::ImminentCritical => imgs.buff_imminentcritical,
@@ -5251,6 +5273,8 @@ pub fn get_buff_image(buff: BuffKind, imgs: &Imgs) -> conrod_core::image::Id {
         BuffKind::Defiance => imgs.buff_defiance,
         BuffKind::Bloodfeast => imgs.buff_plus_0,
         BuffKind::Berserk => imgs.buff_reckless,
+        BuffKind::ScornfulTaunt => imgs.buff_scornfultaunt,
+        BuffKind::Tenacity => imgs.buff_tenacity,
         //  Debuffs
         BuffKind::Bleeding => imgs.debuff_bleed_0,
         BuffKind::Cursed => imgs.debuff_skull_0,
@@ -5264,13 +5288,16 @@ pub fn get_buff_image(buff: BuffKind, imgs: &Imgs) -> conrod_core::image::Id {
         BuffKind::PotionSickness => imgs.debuff_potionsickness_0,
         BuffKind::Polymorphed => imgs.debuff_polymorphed,
         BuffKind::Heatstroke => imgs.debuff_heatstroke_0,
+        BuffKind::Rooted => imgs.debuff_rooted,
+        BuffKind::Winded => imgs.debuff_winded,
+        BuffKind::Concussion => imgs.debuff_concussion,
+        BuffKind::Staggered => imgs.debuff_staggered,
     }
 }
 
 pub fn get_sprite_desc(sprite: SpriteKind, localized_strings: &Localization) -> Option<Cow<str>> {
     let i18n_key = match sprite {
-        SpriteKind::Empty => return None,
-        SpriteKind::GlassBarrier => return None,
+        SpriteKind::Empty | SpriteKind::GlassBarrier => return None,
         SpriteKind::Anvil => "hud-crafting-anvil",
         SpriteKind::Cauldron => "hud-crafting-cauldron",
         SpriteKind::CookingPot => "hud-crafting-cooking_pot",
@@ -5290,11 +5317,17 @@ pub fn get_sprite_desc(sprite: SpriteKind, localized_strings: &Localization) -> 
         | SpriteKind::DungeonChest3
         | SpriteKind::DungeonChest4
         | SpriteKind::DungeonChest5
+        | SpriteKind::SahaginChest
         | SpriteKind::TerracottaChest => "common-sprite-chest",
         SpriteKind::Mud => "common-sprite-mud",
         SpriteKind::Grave => "common-sprite-grave",
         SpriteKind::ChairSingle | SpriteKind::ChairDouble => "common-sprite-chair",
         SpriteKind::Crate => "common-sprite-crate",
+        SpriteKind::HangingSign => "common-sprite-signboard",
+        SpriteKind::StreetLamp => "common-sprite-street_lamp",
+        SpriteKind::Lantern => "common-sprite-lantern",
+        SpriteKind::SeashellLantern => "common-sprite-seashell_lantern",
+        SpriteKind::FireBowlGround => "common-sprite-firebowl_ground",
         sprite => return Some(Cow::Owned(format!("{:?}", sprite))),
     };
     Some(localized_strings.get_msg(i18n_key))

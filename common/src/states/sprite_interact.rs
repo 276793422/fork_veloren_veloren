@@ -95,7 +95,11 @@ impl CharacterBehavior for Data {
                 if self.timer < self.static_data.recover_duration {
                     // Recovery
                     if let CharacterState::SpriteInteract(c) = &mut update.character {
-                        c.timer = tick_attack_or_default(data, self.timer, None);
+                        c.timer = tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        );
                     }
                 } else {
                     // Create inventory manipulation event
@@ -202,6 +206,7 @@ impl From<SpriteKind> for Option<SpriteInteractKind> {
             SpriteKind::Keyhole
             | SpriteKind::BoneKeyhole
             | SpriteKind::HaniwaKeyhole
+            | SpriteKind::SahaginKeyhole
             | SpriteKind::GlassKeyhole
             | SpriteKind::KeyholeBars
             | SpriteKind::TerracottaKeyhole => Some(SpriteInteractKind::Unlock),

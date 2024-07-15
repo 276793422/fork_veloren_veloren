@@ -2,7 +2,7 @@
 
 buff-heal = Soin
     .desc = Régénère progressivement des points de vie.
-    .stat = Restaure { $str_total } points de vie
+    .stat = Restaure { $str_total } points de vie.
 
 ## Potion
 
@@ -23,7 +23,7 @@ buff-campfire_heal = Soin autour d'un feu de camp
 
 buff-energy_regen = Régénération d'Endurance
     .desc = Régénération de l'Endurance plus rapide.
-    .stat = Restaure { $str_total } d'Endurance
+    .stat = Restaure { $str_total } d'Endurance.
 
 ## Augmentation de Santé
 
@@ -31,7 +31,7 @@ buff-increase_max_health = Augmentation de Santé
     .desc = Vos point de vie maximum sont augmentés.
     .stat =
         Augmente les points de vie max
-        de { $strength }
+        de { $strength }.
 
 ## Augmentation d'Endurance
 
@@ -39,18 +39,18 @@ buff-increase_max_energy = Augmentation d'Endurance
     .desc = Votre énergie maximale est augmentée.
     .stat =
         Augmente les points d'endurance max
-        de { $strength }
+        de { $strength }.
 
 ## Invulnérabilité
 
 buff-invulnerability = Invulnérabilité
     .desc = Vous ne pouvez pas être blessé par une attaque.
-    .stat = Rend invincible
+    .stat = Rend invincible.
 
 ## Aura de Protection
 
 buff-protectingward = Aura de Protection
-    .desc = Vous êtes protégé, d'une quelconque façon, des attaques ennemies
+    .desc = Vous êtes protégé, d'une quelconque façon, des attaques ennemies.
 
 ## Frénésie
 
@@ -164,3 +164,6 @@ buff-agility = Agilité
 # Heatstroke
 buff-heatstroke = Coup de chaleur
     .desc = Vous avez été exposé à la chaleur et vous avez pris un coup de chaud. Votre récupération d'énergie et vitesse de mouvement sont réduits. Détendez vous.
+# Poisoned
+buff-poisoned = Empoisonné(e)
+    .desc = Vous sentez votre vitalité vous échapper…

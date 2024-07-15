@@ -285,7 +285,8 @@ impl Body {
                 | object::Body::FireworkYellow
                 | object::Body::MultiArrow
                 | object::Body::BoltBesieger
-                | object::Body::Dart => {
+                | object::Body::Dart
+                | object::Body::BubbleBomb => {
                     let dim = self.dimensions().map(|a| a * 0.5 * scale);
                     const CD: f32 = 0.02;
                     CD * PI * dim.x * dim.z
@@ -305,7 +306,8 @@ impl Body {
                 | object::Body::Pumpkin3
                 | object::Body::Pumpkin4
                 | object::Body::Pumpkin5
-                | object::Body::Pebble => {
+                | object::Body::Pebble
+                | object::Body::IronPikeBomb => {
                     let dim = self.dimensions().map(|a| a * 0.5 * scale);
                     const CD: f32 = 0.5;
                     CD * PI * dim.x * dim.z
@@ -385,13 +387,12 @@ pub fn zero_lift_drag_coefficient() -> f32 { 0.026 }
 /// Does not apply to twisted, cambered or delta wings. (It still gives a
 /// reasonably accurate approximation if the wing shape is not truly
 /// elliptical.)
-/// 1. geometric angle of attack, i.e. the pitch angle relative to
-/// freestream flow
-/// 2. up to around ~18°, at which point maximum lift has been achieved and
-/// thereafter falls precipitously, causing a stall (this is the stall
-/// angle)
-/// 3. effective aoa, i.e. geometric aoa - induced aoa; assumes
-/// no sideslip
+///   1. geometric angle of attack, i.e. the pitch angle relative to freestream
+///      flow
+///   2. up to around ~18°, at which point maximum lift has been achieved and
+///      thereafter falls precipitously, causing a stall (this is the stall
+///      angle)
+///   3. effective aoa, i.e. geometric aoa - induced aoa; assumes no sideslip
 // TODO: Look into handling tapered wings
 fn lift_slope(aspect_ratio: f32, sweep_angle: Option<f32>) -> f32 {
     // lift slope for a thin aerofoil, given by Thin Aerofoil Theory

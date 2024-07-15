@@ -35,7 +35,7 @@ body-npc-speech-biped_large-sea_bishop = en sjöbiskop
 # Monster descriptions, used ONLY in npc-speech-tell_monster
 body-npc-speech-biped_large-haniwa_general = en haniwageneral
 # Monster descriptions, used ONLY in npc-speech-tell_monster
-body-npc-speech-biped_large-cave_troll = ett grott-troll
+body-npc-speech-biped_large-cave_troll = ett grottroll
 # Monster descriptions, used ONLY in npc-speech-tell_monster
 body-npc-speech-biped_large-harvester = en skördare
 # Monster descriptions, used ONLY in npc-speech-tell_monster
@@ -56,3 +56,11 @@ body-npc-speech-biped_large-terracotta_besieger = en terrakottabelägrare
 body-npc-speech-biped_large-gigas_frost = en gigas frost
 # Monster descriptions, used ONLY in npc-speech-tell_monster
 body-npc-speech-biped_large-tidal_warrior = en tidvattenkrigare
+# Monster descriptions, used ONLY in npc-speech-tell_monster
+body-npc-speech-biped_large-husk_brute = en husk brute
+# Monster descriptions, used ONLY in npc-speech-tell_monster
+body-npc-speech-biped_large-adlet_elder = en adlet äldre
+# Monster descriptions, used ONLY in npc-speech-tell_monster
+body-npc-speech-biped_large-terracotta_pursuer = en terrakottaförföljare
+# Monster descriptions, used ONLY in npc-speech-tell_monster
+body-npc-speech-biped_large-cursekeeper = terrakottaförföljare

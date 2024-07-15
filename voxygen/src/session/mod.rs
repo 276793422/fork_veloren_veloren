@@ -27,7 +27,8 @@ use common::{
     link::Is,
     mounting::{Mount, VolumePos},
     outcome::Outcome,
-    recipe,
+    recipe::{self, RecipeBookManifest},
+    states::utils::can_perform_pet,
     terrain::{Block, BlockKind},
     trade::TradeResult,
     util::{Dir, Plane},
@@ -1074,6 +1075,22 @@ impl PlayState for SessionState {
                                                     .state()
                                                     .read_component_cloned::<comp::Body>(*entity);
 
+                                                let pettable = client
+                                                    .state()
+                                                    .read_component_cloned::<comp::Pos>(*entity)
+                                                    .zip(client.state().read_component_cloned::<comp::Alignment>(*entity))
+                                                    .zip(client.state().read_component_cloned::<comp::Pos>(client.entity()))
+                                                    .map_or(
+                                                        false,
+                                                        |((target_position, target_alignment), client_position)| {
+                                                            can_perform_pet(
+                                                                client_position,
+                                                                target_position,
+                                                                target_alignment,
+                                                            )
+                                                        },
+                                                    );
+
                                                 if client
                                                     .state()
                                                     .ecs()
@@ -1097,6 +1114,8 @@ impl PlayState for SessionState {
                                                     .flatten()
                                                 {
                                                     client.activate_portal(portal_uid);
+                                                } else if pettable {
+                                                    client.do_pet(*entity);
                                                 } else {
                                                     client.npc_interact(*entity, Subject::Regular);
                                                 }
@@ -1717,12 +1736,14 @@ impl PlayState for SessionState {
                                         let slot_deficit = inventory.free_after_equip(inv_slot);
                                         if slot_deficit < 0 {
                                             self.hud.set_prompt_dialog(PromptDialogSettings::new(
-                                                format!(
-                                                    "Equipping this item will result in \
-                                                     insufficient inventory space to hold the \
-                                                     items in your inventory and {} items will \
-                                                     drop on the floor. Do you wish to continue?",
-                                                    slot_deficit.abs()
+                                                global_state.i18n.read().get_content(
+                                                    &Content::localized_with_args(
+                                                        "hud-bag-use_slot_equip_drop_items",
+                                                        [(
+                                                            "slot_deficit",
+                                                            slot_deficit.unsigned_abs() as u64,
+                                                        )],
+                                                    ),
                                                 ),
                                                 HudEvent::UseSlot {
                                                     slot,
@@ -1742,23 +1763,23 @@ impl PlayState for SessionState {
                                             let slot_deficit =
                                                 inventory.free_after_unequip(equip_slot);
                                             if slot_deficit < 0 {
-                                                self.hud.set_prompt_dialog(
-                                                    PromptDialogSettings::new(
-                                                        format!(
-                                                            "Unequipping this item  will result \
-                                                             in insufficient inventory space to \
-                                                             hold the items in your inventory and \
-                                                             {} items will drop on the floor. Do \
-                                                             you wish to continue?",
-                                                            slot_deficit.abs()
+                                                self.hud
+                                                    .set_prompt_dialog(PromptDialogSettings::new(
+                                                    global_state.i18n.read().get_content(
+                                                        &Content::localized_with_args(
+                                                            "hud-bag-use_slot_unequip_drop_items",
+                                                            [(
+                                                                "slot_deficit",
+                                                                slot_deficit.unsigned_abs() as u64,
+                                                            )],
                                                         ),
-                                                        HudEvent::UseSlot {
-                                                            slot,
-                                                            bypass_dialog: true,
-                                                        },
-                                                        None,
                                                     ),
-                                                );
+                                                    HudEvent::UseSlot {
+                                                        slot,
+                                                        bypass_dialog: true,
+                                                    },
+                                                    None,
+                                                ));
                                                 move_allowed = false;
                                             }
                                         } else {
@@ -1803,10 +1824,15 @@ impl PlayState for SessionState {
                                             if slot_deficit < 0 {
                                                 self.hud.set_prompt_dialog(
                                                     PromptDialogSettings::new(
-                                                        format!(
-                                                            "This will result in dropping {} \
-                                                             item(s) on the ground. Are you sure?",
-                                                            slot_deficit.abs()
+                                                        global_state.i18n.read().get_content(
+                                                            &Content::localized_with_args(
+                                                                "hud-bag-swap_slots_drop_items",
+                                                                [(
+                                                                    "slot_deficit",
+                                                                    slot_deficit.unsigned_abs()
+                                                                        as u64,
+                                                                )],
+                                                            ),
                                                         ),
                                                         HudEvent::SwapSlots {
                                                             slot_a,
@@ -1855,21 +1881,24 @@ impl PlayState for SessionState {
                                             let slot_deficit =
                                                 inventory.free_after_swap(equip_slot, inv_slot);
                                             if slot_deficit < 0 {
-                                                self.hud.set_prompt_dialog(
-                                                    PromptDialogSettings::new(
-                                                        format!(
-                                                            "This will result in dropping {} \
-                                                             item(s) on the ground. Are you sure?",
-                                                            slot_deficit.abs()
+                                                self.hud
+                                                    .set_prompt_dialog(PromptDialogSettings::new(
+                                                    global_state.i18n.read().get_content(
+                                                        &Content::localized_with_args(
+                                                            "hud-bag-split_swap_slots_drop_items",
+                                                            [(
+                                                                "slot_deficit",
+                                                                slot_deficit.unsigned_abs() as u64,
+                                                            )],
                                                         ),
-                                                        HudEvent::SwapSlots {
-                                                            slot_a,
-                                                            slot_b,
-                                                            bypass_dialog: true,
-                                                        },
-                                                        None,
                                                     ),
-                                                );
+                                                    HudEvent::SwapSlots {
+                                                        slot_a,
+                                                        slot_b,
+                                                        bypass_dialog: true,
+                                                    },
+                                                    None,
+                                                ));
                                                 move_allowed = false;
                                             }
                                         }
@@ -1949,13 +1978,24 @@ impl PlayState for SessionState {
                     } => {
                         let slots = {
                             let client = self.client.borrow();
-                            if let Some(recipe) = client.recipe_book().get(&recipe) {
-                                client.inventories().get(client.entity()).and_then(|inv| {
-                                    recipe.inventory_contains_ingredients(inv, 1).ok()
-                                })
+
+                            let s = if let Some(inventory) = client
+                                .state()
+                                .ecs()
+                                .read_storage::<comp::Inventory>()
+                                .get(client.entity())
+                            {
+                                let rbm =
+                                    client.state().ecs().read_resource::<RecipeBookManifest>();
+                                if let Some(recipe) = inventory.get_recipe(&recipe, &rbm) {
+                                    recipe.inventory_contains_ingredients(inventory, 1).ok()
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
-                            }
+                            };
+                            s
                         };
                         if let Some(slots) = slots {
                             self.client.borrow_mut().craft_recipe(

@@ -135,7 +135,7 @@ impl SkillGroupKind {
     pub fn skill_point_cost(self, level: u16) -> u32 {
         use std::f32::consts::E;
         match self {
-            Self::Weapon(ToolKind::Sword | ToolKind::Axe) => {
+            Self::Weapon(ToolKind::Sword | ToolKind::Axe | ToolKind::Hammer) => {
                 let level = level as f32;
                 ((400.0 * (level / (level + 20.0)).powi(2) + 5.0 * E.powf(0.025 * level))
                     .min(u32::MAX as f32) as u32)
@@ -482,14 +482,14 @@ impl SkillSet {
     ///
     /// NOTE: Please don't use pathological or clever implementations of to_mut
     /// here.
-    pub fn unlock_skill_cow<'a, B, C: 'a>(
+    pub fn unlock_skill_cow<'a, B, C>(
         this_: &'a mut B,
         skill: Skill,
         to_mut: impl FnOnce(&'a mut B) -> &'a mut C,
     ) -> Result<(), SkillUnlockError>
     where
         B: Borrow<SkillSet>,
-        C: BorrowMut<SkillSet>,
+        C: BorrowMut<SkillSet> + 'a,
     {
         if let Some(skill_group_kind) = skill.skill_group_kind() {
             let this = (*this_).borrow();

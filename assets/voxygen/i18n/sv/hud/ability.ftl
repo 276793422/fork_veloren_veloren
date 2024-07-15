@@ -1,7 +1,5 @@
 common-abilities-debug-possess = Besättande spil
     .desc = Skjuter en förgiftad pil. Låter dig kontrollera ditt mål.
-common-abilities-hammer-leap = Nederslag
-    .desc = En attack som träffar ett område och knuffar fiender. Hoppar mot pekarens position.
 common-abilities-bow-shotgun = Pilskur
     .desc = Skjuter iväg en skur av pilar.
 common-abilities-staff-fireshockwave = Eldens ring
@@ -215,80 +213,80 @@ common-abilities-sword-cleaving_dual_whirlwind_slice = Virvelvindssnitt
     .desc =
         Hugg cirkulärt alla fiender runtom dig med båda svärd.
         Påbörjar klyvande hållning.
-common-abilities-sword-cleaving_earth_splitter = Jordsklyvare
+common-abilities-sword-cleaving_earth_splitter = Jordklyvare
     .desc =
-        Klyv jorden, om detta används medan du faller kommer det ha en mycket starkare inverkan
-        Påbörjar klyvande hållning
+        Klyv jorden, om detta används medan du faller kommer det ha en mycket starkare inverkan.
+        Påbörjar klyvande hållning.
 common-abilities-sword-heavy_fortitude = Uthållighet
     .desc =
-        Ökar ditt vacklingsmotstånd och medan du tar mer skada kommer dina attacker göra att fiender vacklar mer
-        Kräver tung hållning
+        Ökar ditt vacklingsmotstånd och medan du tar mer skada kommer dina attacker vara mer vacklande.
+        Kräver tung hållning.
 common-abilities-sword-heavy_pillar_thrust = Pelarstöt
     .desc =
-        Stick ditt svärd genom fienden, hela vägen ner i marken, är effektivare om detta används medan du faller
-        Kräver tung hållning
+        Stick ditt svärd genom fienden, hela vägen ner i marken, är effektivare om detta används medan du faller.
+        Kräver tung hållning.
 common-abilities-sword-agile_dancing_edge = Dansande Egg
     .desc =
-        Rör dig och attacker snabbare
-        Kräver smidigt hållning
-common-abilities-sword-agile_flurry = Virrvarr
+        Rör dig och attackera snabbare.
+        Kräver smidig hållning.
+common-abilities-sword-agile_flurry = Flurry
     .desc =
-        Flera snabba hugg
-        Kräver smidigt hållning
+        Flera snabba hugg.
+        Kräver smidig hållning.
 common-abilities-sword-agile_dual_flurry = Flurry
     .desc =
-        Flera snabba hugg med båda svärd
-        Kräver smidigt hållning
+        Flera snabba hugg med båda svärd.
+        Kräver smidig hållning.
 common-abilities-sword-defensive_stalwart_sword = Stabilt Svärd
     .desc =
-        Skaka av dig de flesta attackerna, inkommande skada är reducerad
-        Kräver defensiv hållning
+        Skaka av dig de flesta attackerna, inkommande skada är reducerad.
+        Kräver defensiv hållning.
 common-abilities-sword-defensive_deflect = Deflektera
     .desc =
-        En manöver snabb nog att blockera projektiler
-        Kräver defensiv hållning
+        En manöver snabb nog att blockera projektiler.
+        Kräver defensiv hållning.
 common-abilities-sword-crippling_eviscerate = Slit isär
     .desc =
-        Sliter upp sår mer, gör mer skada mot förlamade fiender
-        Kräver förlamande hållning
+        Sliter upp sår mer, gör mer skada mot förlamade fiender.
+        Kräver förlamande hållning.
 common-abilities-sword-crippling_bloody_gash = Blodigt Jack
     .desc =
-        Hugg grymt en redan blödande skada, gör mer skada mot blödande fiender
-        Kräver förlamande hållning
-common-abilities-sword-cleaving_blade_fever = Bladsfeber
+        Hugg grymt en redan blödande skada, gör mer skada mot blödande fiender.
+        Kräver förlamande hållning.
+common-abilities-sword-cleaving_blade_fever = Bladfeber
     .desc =
-        Attackera mer hämningslöst vilket ökar kraften i dina hugg medan det lämnar dig öppen för inkommande attacker
-        Kräver klyvande hållning
+        Attackera mer hämningslöst vilket ökar kraften i dina hugg medan det lämnar dig öppen för inkommande attacker.
+        Kräver klyvande hållning.
 common-abilities-sword-cleaving_sky_splitter = Himmelsklyvare
     .desc =
-        Ett kraftfullt hugg som till och med sägs kunna klyva himmelen, men kommer klyva genom fiender
-        Kräver klyvande hållning
+        Ett kraftfullt hugg som till och med sägs kunna klyva himlen, men kommer klyva genom fiender.
+        Kräver klyvande hållning.
 -heavy_stance = ""
 -agile_stance = ""
 common-abilities-axe-execute = Avrätta
     .desc =
-        Ett förödande slag som ofta är känd att vara fatal
-        Kräver 30 kombo för användning
-        Uppgraderar automatiskt till maelstrom vid 50 kombo om upplåst
+        Ett förödande slag som ofta är känd att vara fatal.
+        Kräver 30 kombo att använda.
+        Uppgraderar automatiskt till maelstrom vid 50 kombo om upplåst.
 common-abilities-axe-berserk = Bärsärk
-    .desc = Ökar din styrka dock med kostnaden av att lämna dig sårbar
+    .desc = Ökar din styrka dock med kostnaden av att lämna dig sårbar.
 common-abilities-axe-brutal_swing = Brutal Sving
-    .desc = En snurrande klyvning runt om dig
+    .desc = En snurrande klyvning runt om dig.
 common-abilities-axe-maelstrom = Maelstrom
     .desc =
-        Slå allt i din närhet med ett förödande, snurrande slag
-        Uppgraderar automatisk från avrätta vid 50 kombo
+        Slå allt i din närhet med ett förödande, snurrande slag.
+        Uppgraderar automatisk från avrätta vid 50 kombo.
 # Axe abilities
 common-abilities-axe-triple_chop = Tripellhugg
-    .desc = Tre snabba slag
-common-abilities-axe-cleave = Klyva
-    .desc = Ett nergående hugg som kan bygga multikombo
+    .desc = Tre snabba slag.
+common-abilities-axe-cleave = Klyv
+    .desc = Ett nergående hugg som kan bygga multikombo.
 common-abilities-axe-plunder = Plunder
-    .desc = Ta snabba steg mot din fiende, och stjäl deras balans med ett slag
+    .desc = Ta snabba steg mot din fiende, och stjäl deras balans med ett slag.
 common-abilities-axe-fracture = Fraktur
     .desc =
-        Ett förlamande slag som hindrar din fiendes rörelse
-        Skalar med kombo vid aktivering, konsumerar hälften av kombo
+        Ett förlamande slag som hindrar din fiendes rörelse.
+        Skalar med kombo vid aktivering, konsumerar hälften av kombo.
 common-abilities-debug-evolve = Utveckla
     .desc = Du blir ett bättre själv.
 # Debug abilities
@@ -297,3 +295,175 @@ common-abilities-debug-glide_speeder = Vroom
 # Debug abilities
 common-abilities-debug-glide_boost = Vroom
     .desc = Ger dig kraften att nå himlen.
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-agile_state = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-crippling_stance = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-cleaving_stance = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-basic_state = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-heavy_state = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-defensive_state = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-crippling_state = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-cleaving_state = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-double_slash = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-modified_depending_stance = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-crescent_slash = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-fell_strike = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-skewer = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-cascade = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-cross_cut = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-requires_moderate_combo = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-require_stance = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-defensive_stance = ""
+# Internal terms, currently only used in zh-Hans.
+# If we remove them here, they also get auto-removed in zh-Hans,
+# so please keep them, even when not used in English file.
+# See https://github.com/WeblateOrg/weblate/issues/9895
+-enter_stance = ""
+# Axe abilities
+common-abilities-hammer-helm_crusher = Hjälmkrossare
+    .desc = Slå din fiendes huvud med din hammare, och ge dem hjärnskakning.
+# Axe abilities
+common-abilities-hammer-tenacity = Tenacitet
+    .desc = Håll dig själv stark då du står emot attack efter attack, och klarar av att attackera under hela tiden.
+# Axe abilities
+common-abilities-hammer-earthshaker = Jordskakare
+    .desc = Slå huvudet av din bloddränkta hammare i marken, och utlös en chockvåg som slår vinden ur alla omkring dig.
+# Axe abilities
+common-abilities-hammer-judgement = Dömning
+    .desc = Ta din hammare ner på din fiende med all din vikt, och potentiellt döda dem med en gång om de är vacklade.
+# Axe abilities
+common-abilities-hammer-upheaval = Omstörtning
+    .desc = Slå din hammare in i dina fiender, och knocka dem upp i luften och lämna dem sårbara för vacklanden.
+# Axe abilities
+common-abilities-hammer-retaliate = Retaliera
+    .desc = Efter att blockat en attack, retaliera med ett tungt slag tillbaka.
+# Axe abilities
+common-abilities-hammer-tremor = Tremor
+    .desc = Slå jorden med tillräckligt kraft så att marken under dina fiender skakar.
+# Axe abilities
+common-abilities-hammer-intercept = Interceptera
+    .desc = Anfall framåt med din hammare som kastar din vikt bakom ditt slag.
+# Axe abilities
+common-abilities-hammer-spine_cracker = Ryggradsknäckare
+    .desc = När din fiende vänder sin rygg mot dig, slå till dem hårt i baken och rikta in på den svaga delen av deras ryggrad.
+# Axe abilities
+common-abilities-axe-bloodfeast = Blodfest
+    .desc = Din yxa törstar efter dina fienders blod, och återfyller dig med varje slag mot en blödande fiende.
+# Axe abilities
+common-abilities-axe-defiance = Trotsning
+    .desc = Stirra döden i ögat längre medan du gör dig sjäv resistent mot både vacklanden och döden.
+# Axe abilities
+# Hammer abilities
+common-abilities-hammer-solid_smash = Rejäl Smäll
+    .desc = En rejäl smäll, det kommer göra ont.
+# Axe abilities
+common-abilities-hammer-dual_intercept = Interceptera
+    .desc = Anfall framåt med dina hammare som kastar din vikt bakom ditt slag.
+# Axe abilities
+common-abilities-hammer-breach = Bryta Igenom
+    .desc = Bryt igenom dina fienders försök till försvar med ett tungt slag från din hammare.
+# Axe abilities
+common-abilities-hammer-thunderclap = Åskklapp
+    .desc = Släpp lös ett förödande, adrenalinfyllt överhuvudsslag mot din fiende.
+# Axe abilities
+common-abilities-hammer-dual_upheaval = Omstörtning
+    .desc = Slå dina hammare in i dina fiender, och knocka dem upp i luften och lämna dem sårbara för vacklanden.
+# Axe abilities
+common-abilities-hammer-seismic_shock = Seismisk Chock
+    .desc = Efter uppbyggnad av tillräckligt momentum i din hammare, slå marken med tillräcklig kraft att den spränger utåt, och kastar dina fiender i luften.
+# Axe abilities
+common-abilities-axe-adrenaline_rush = Adrenalinkick
+    .desc =
+        Konsumera all din kombo för att återfylla din energi.
+        Skalar med kombo vid aktivation, konsumerar all kombo.
+# Axe abilities
+common-abilities-axe-rake = Räfsa
+    .desc = Dra din yxa över din fiende och orsaka blödning.
+# Axe abilities
+common-abilities-axe-bulkhead = Bulkhead
+    .desc =
+        En tung sving som vissa säger kan även vackla titaner.
+        Kräver 30 kombo för användning.
+        Uppgraderar automatiskt till kapsejsning vid 50 kombo om upplåst.
+# Axe abilities
+common-abilities-axe-capsize = Kapsejsa
+    .desc =
+        Vackla allt i närheten med ett tungt snurrande slag.
+        Uppgraderar automatiskt från bulkhead vid 50 kombo.
+# Axe abilities
+common-abilities-axe-sunder = Söndra
+    .desc = Genom att ändra ditt grepp kan du kringgå din fiendes utrustning medan du återhämtar din energi mer effektivt.
+# Axe abilities
+common-abilities-axe-skull_bash = Skalleslag
+    .desc = Ett slag med det platta av din yxa som kan vackla.

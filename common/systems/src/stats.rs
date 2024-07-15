@@ -131,6 +131,7 @@ impl<'a> System<'a> for Sys {
                 CharacterState::Idle(_)
                 | CharacterState::Talk
                 | CharacterState::Dance
+                | CharacterState::Pet(_)
                 | CharacterState::Skate(_)
                 | CharacterState::Glide(_)
                 | CharacterState::GlideWield(_)
@@ -149,7 +150,6 @@ impl<'a> System<'a> for Sys {
                 | CharacterState::DashMelee(_)
                 | CharacterState::LeapMelee(_)
                 | CharacterState::LeapShockwave(_)
-                | CharacterState::ComboMeleeDeprecated(_)
                 | CharacterState::ComboMelee2(_)
                 | CharacterState::BasicRanged(_)
                 | CharacterState::Music(_)
@@ -167,7 +167,8 @@ impl<'a> System<'a> for Sys {
                 | CharacterState::FinisherMelee(_)
                 | CharacterState::DiveMelee(_)
                 | CharacterState::RiposteMelee(_)
-                | CharacterState::RapidMelee(_) => {
+                | CharacterState::RapidMelee(_)
+                | CharacterState::StaticAura(_) => {
                     if energy.needs_regen_rate_reset() {
                         energy.reset_regen_rate();
                     }

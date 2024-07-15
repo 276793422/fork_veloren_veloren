@@ -22,7 +22,7 @@ use common::{
             ConsumableKind, Effects, Item, ItemDesc, ItemKind,
         },
         item_drop,
-        projectile::ProjectileConstructor,
+        projectile::ProjectileConstructorKind,
         Agent, Alignment, Body, CharacterState, Content, ControlAction, ControlEvent, Controller,
         HealthChange, InputKind, InventoryAction, Pos, Scale, UnresolvedChatMsg, UtteranceKind,
     },
@@ -165,7 +165,10 @@ impl<'a> AgentData<'a> {
         let climbing_out_of_water = self.physics_state.in_liquid().map_or(false, |h| h < 1.0)
             && bearing.z > 0.0
             && self.physics_state.on_wall.is_some();
-        self.jump_if(bearing.z > 1.5 || climbing_out_of_water, controller);
+        self.jump_if(
+            bearing.z > 1.5 || climbing_out_of_water || self.traversal_config.can_fly,
+            controller,
+        );
         controller.inputs.move_z = bearing.z;
         if bearing.z > 0.0 {
             controller.inputs.climb = Some(comp::Climb::Up);
@@ -274,6 +277,18 @@ impl<'a> AgentData<'a> {
                     .map(|pos| pos.as_())
                     .unwrap_or(travel_to);
 
+                    let in_loaded_chunk = |pos: Vec3<f32>| {
+                        read_data
+                            .terrain
+                            .contains_key(read_data.terrain.pos_key(pos.map(|e| e.floor() as i32)))
+                    };
+
+                    // If current position lies inside a loaded chunk, we need to plan routes using
+                    // voxel info. If target happens to be in an unloaded chunk,
+                    // we need to make our way to the current chunk border, and
+                    // then reroute if needed.
+                    let is_target_loaded = in_loaded_chunk(chase_tgt);
+
                     if let Some((bearing, speed)) = agent.chaser.chase(
                         &*read_data.terrain,
                         self.pos.0,
@@ -281,11 +296,11 @@ impl<'a> AgentData<'a> {
                         chase_tgt,
                         TraversalConfig {
                             min_tgt_dist: self.traversal_config.min_tgt_dist * 1.25,
+                            is_target_loaded,
                             ..self.traversal_config
                         },
                     ) {
                         self.traverse(controller, bearing, speed.min(speed_factor));
-                        self.jump_if(self.traversal_config.can_fly, controller);
 
                         let height_offset = bearing.z
                             + if self.traversal_config.can_fly {
@@ -443,6 +458,28 @@ impl<'a> AgentData<'a> {
                 None => {},
             }
 
+            let owner_uid = self.alignment.and_then(|alignment| match alignment {
+                Alignment::Owned(owner_uid) => Some(owner_uid),
+                _ => None,
+            });
+
+            let owner = owner_uid.and_then(|owner_uid| get_entity_by_id(*owner_uid, read_data));
+
+            let is_being_pet = owner
+                .and_then(|owner| read_data.char_states.get(owner))
+                .map_or(false, |char_state| match char_state {
+                    CharacterState::Pet(petting_data) => {
+                        petting_data.static_data.target_uid == *self.uid
+                    },
+                    _ => false,
+                });
+
+            let is_in_range = owner
+                .and_then(|owner| read_data.positions.get(owner))
+                .map_or(false, |pos| {
+                    pos.0.distance_squared(self.pos.0) < MAX_MOUNT_RANGE.powi(2)
+                });
+
             // Idle NPCs should try to jump on the shoulders of their owner, sometimes.
             if read_data.is_riders.contains(*self.entity) {
                 if rng.gen_bool(0.0001) {
@@ -450,10 +487,9 @@ impl<'a> AgentData<'a> {
                 } else {
                     break 'activity;
                 }
-            } else if let Some(Alignment::Owned(owner_uid)) = self.alignment
-                && let Some(owner) = get_entity_by_id(*owner_uid, read_data)
-                && let Some(pos) = read_data.positions.get(owner)
-                && pos.0.distance_squared(self.pos.0) < MAX_MOUNT_RANGE.powi(2)
+            } else if let Some(owner_uid) = owner_uid
+                && is_in_range
+                && !is_being_pet
                 && rng.gen_bool(0.01)
             {
                 controller.push_event(ControlEvent::Mount(*owner_uid));
@@ -958,14 +994,15 @@ impl<'a> AgentData<'a> {
                 controller.push_utterance(UtteranceKind::Surprised);
             }
         }
-
-        agent.target = target.map(|(entity, attack_target)| Target {
-            target: entity,
-            hostile: attack_target,
-            selected_at: read_data.time.0,
-            aggro_on,
-            last_known_pos: get_pos(entity).map(|pos| pos.0),
-        })
+        if agent.psyche.should_stop_pursuing || target.is_some() {
+            agent.target = target.map(|(entity, attack_target)| Target {
+                target: entity,
+                hostile: attack_target,
+                selected_at: read_data.time.0,
+                aggro_on,
+                last_known_pos: get_pos(entity).map(|pos| pos.0),
+            })
+        }
     }
 
     pub fn attack(
@@ -1040,16 +1077,20 @@ impl<'a> AgentData<'a> {
                 if let Some(ability_spec) = item.ability_spec() {
                     match &*ability_spec {
                         AbilitySpec::Custom(spec) => match spec.as_str() {
-                            "Oni" | "Sword Simple" => Tactic::SwordSimple,
-                            "Staff Simple" => Tactic::Staff,
+                            "Oni" | "Sword Simple" | "BipedLargeCultistSword" => {
+                                Tactic::SwordSimple
+                            },
+                            "Staff Simple" | "BipedLargeCultistStaff" => Tactic::Staff,
+                            "BipedLargeCultistHammer" => Tactic::Hammer,
                             "Simple Flying Melee" => Tactic::SimpleFlyingMelee,
-                            "Bow Simple" | "Boreal Bow" => Tactic::Bow,
+                            "Bow Simple" | "Boreal Bow" | "BipedLargeCultistBow" => Tactic::Bow,
                             "Stone Golem" | "Coral Golem" => Tactic::StoneGolem,
+                            "Iron Golem" => Tactic::IronGolem,
                             "Quad Med Quick" => Tactic::CircleCharge {
                                 radius: 3,
                                 circle_time: 2,
                             },
-                            "Quad Med Jump" => Tactic::QuadMedJump,
+                            "Quad Med Jump" | "Darkhound" => Tactic::QuadMedJump,
                             "Quad Med Charge" => Tactic::CircleCharge {
                                 radius: 6,
                                 circle_time: 1,
@@ -1057,6 +1098,7 @@ impl<'a> AgentData<'a> {
                             "Quad Med Basic" => Tactic::QuadMedBasic,
                             "Quad Med Hoof" => Tactic::QuadMedHoof,
                             "ClaySteed" => Tactic::ClaySteed,
+                            "Rocksnapper" => Tactic::Rocksnapper,
                             "Roshwalr" => Tactic::Roshwalr,
                             "Asp" | "Maneater" => Tactic::QuadLowRanged,
                             "Quad Low Breathe" | "Quad Low Beam" | "Basilisk" => {
@@ -1102,6 +1144,7 @@ impl<'a> AgentData<'a> {
                             "Jiangshi" => Tactic::Jiangshi,
                             "Mindflayer" => Tactic::Mindflayer,
                             "Flamekeeper" => Tactic::Flamekeeper,
+                            "Forgemaster" => Tactic::Forgemaster,
                             "Minotaur" => Tactic::Minotaur,
                             "Cyclops" => Tactic::Cyclops,
                             "Dullahan" => Tactic::Dullahan,
@@ -1118,7 +1161,7 @@ impl<'a> AgentData<'a> {
                             "Cardinal" => Tactic::Cardinal,
                             "Sea Bishop" => Tactic::SeaBishop,
                             "Dagon" => Tactic::Dagon,
-                            "HermitAlligator" => Tactic::HermitAlligator,
+                            "Snaretongue" => Tactic::Snaretongue,
                             "Dagonite" => Tactic::ArthropodAmbush,
                             "Gnarling Dagger" => Tactic::SimpleBackstab,
                             "Gnarling Blowgun" => Tactic::ElevatedRanged,
@@ -1161,9 +1204,15 @@ impl<'a> AgentData<'a> {
         // Wield the weapon as running towards the target
         controller.push_action(ControlAction::Wield);
 
-        let min_attack_dist = (self.body.map_or(0.5, |b| b.max_radius()) + DEFAULT_ATTACK_RANGE)
-            * self.scale
-            + tgt_data.body.map_or(0.5, |b| b.max_radius()) * tgt_data.scale.map_or(1.0, |s| s.0);
+        // Information for attack checks
+        // 'min_attack_dist' uses DEFAULT_ATTACK_RANGE, while 'body_dist' does not
+        let self_radius = self.body.map_or(0.5, |b| b.max_radius()) * self.scale;
+        let self_attack_range =
+            (self.body.map_or(0.5, |b| b.max_radius()) + DEFAULT_ATTACK_RANGE) * self.scale;
+        let tgt_radius =
+            tgt_data.body.map_or(0.5, |b| b.max_radius()) * tgt_data.scale.map_or(1.0, |s| s.0);
+        let min_attack_dist = self_attack_range + tgt_radius;
+        let body_dist = self_radius + tgt_radius;
         let dist_sqrd = self.pos.0.distance_squared(tgt_data.pos.0);
         let angle = self
             .ori
@@ -1229,14 +1278,11 @@ impl<'a> AgentData<'a> {
                 )
             },
             CharacterState::BasicRanged(c) => {
-                let offset_z = match c.static_data.projectile {
-                    // Aim fireballs at feet instead of eyes for splash damage
-                    ProjectileConstructor::Fireball {
-                        damage: _,
-                        radius: _,
-                        energy_regen: _,
-                        min_falloff: _,
-                    } => 0.0,
+                let offset_z = match c.static_data.projectile.kind {
+                    // Aim explosives and hazards at feet instead of eyes for splash damage
+                    ProjectileConstructorKind::Explosive { .. }
+                    | ProjectileConstructorKind::ExplosiveHazard { .. }
+                    | ProjectileConstructorKind::Hazard { .. } => 0.0,
                     _ => tgt_eye_offset,
                 };
                 let projectile_speed = c.static_data.projectile_speed;
@@ -1318,6 +1364,7 @@ impl<'a> AgentData<'a> {
         }
 
         let attack_data = AttackData {
+            body_dist,
             min_attack_dist,
             dist_sqrd,
             angle,
@@ -1363,6 +1410,9 @@ impl<'a> AgentData<'a> {
             ),
             Tactic::StoneGolem => {
                 self.handle_stone_golem_attack(agent, controller, &attack_data, tgt_data, read_data)
+            },
+            Tactic::IronGolem => {
+                self.handle_iron_golem_attack(agent, controller, &attack_data, tgt_data, read_data)
             },
             Tactic::CircleCharge {
                 radius,
@@ -1429,6 +1479,9 @@ impl<'a> AgentData<'a> {
                 tgt_data,
                 read_data,
             ),
+            Tactic::Rocksnapper => {
+                self.handle_rocksnapper_attack(agent, controller, &attack_data, tgt_data, read_data)
+            },
             Tactic::Roshwalr => {
                 self.handle_roshwalr_attack(agent, controller, &attack_data, tgt_data, read_data)
             },
@@ -1483,6 +1536,9 @@ impl<'a> AgentData<'a> {
             ),
             Tactic::Flamekeeper => {
                 self.handle_flamekeeper_attack(agent, controller, &attack_data, tgt_data, read_data)
+            },
+            Tactic::Forgemaster => {
+                self.handle_forgemaster_attack(agent, controller, &attack_data, tgt_data, read_data)
             },
             Tactic::BirdLargeFire => self.handle_birdlarge_fire_attack(
                 agent,
@@ -1568,9 +1624,14 @@ impl<'a> AgentData<'a> {
             Tactic::Yeti => {
                 self.handle_yeti_attack(agent, controller, &attack_data, tgt_data, read_data)
             },
-            Tactic::Harvester => {
-                self.handle_harvester_attack(agent, controller, &attack_data, tgt_data, read_data)
-            },
+            Tactic::Harvester => self.handle_harvester_attack(
+                agent,
+                controller,
+                &attack_data,
+                tgt_data,
+                read_data,
+                rng,
+            ),
             Tactic::Cardinal => self.handle_cardinal_attack(
                 agent,
                 controller,
@@ -1596,7 +1657,7 @@ impl<'a> AgentData<'a> {
                 rng,
             ),
             Tactic::CursekeeperFake => {
-                self.handle_cursekeeper_fake_attack(agent, controller, &attack_data)
+                self.handle_cursekeeper_fake_attack(controller, &attack_data)
             },
             Tactic::ShamanicSpirit => self.handle_shamanic_spirit_attack(
                 agent,
@@ -1608,8 +1669,8 @@ impl<'a> AgentData<'a> {
             Tactic::Dagon => {
                 self.handle_dagon_attack(agent, controller, &attack_data, tgt_data, read_data)
             },
-            Tactic::HermitAlligator => {
-                self.handle_hermit_alligator_attack(agent, controller, &attack_data, read_data)
+            Tactic::Snaretongue => {
+                self.handle_snaretongue_attack(agent, controller, &attack_data, read_data)
             },
             Tactic::SimpleBackstab => {
                 self.handle_simple_backstab(agent, controller, &attack_data, tgt_data, read_data)
@@ -1624,7 +1685,7 @@ impl<'a> AgentData<'a> {
                 self.handle_mandragora(agent, controller, &attack_data, tgt_data, read_data)
             },
             Tactic::WoodGolem => {
-                self.handle_wood_golem(agent, controller, &attack_data, tgt_data, read_data)
+                self.handle_wood_golem(agent, controller, &attack_data, tgt_data, read_data, rng)
             },
             Tactic::GnarlingChieftain => self.handle_gnarling_chieftain(
                 agent,

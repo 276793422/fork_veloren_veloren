@@ -1,33 +1,20 @@
-pub mod alpha;
-pub mod beam;
-pub mod beta;
-pub mod block;
+pub mod basic;
 pub mod boost;
-pub mod chargeswing;
 pub mod climb;
 pub mod collect;
-pub mod combomelee;
 pub mod consume;
 pub mod dance;
-pub mod dash;
-pub mod divemelee;
 pub mod equip;
-pub mod finishermelee;
 pub mod glidewield;
 pub mod gliding;
 pub mod idle;
 pub mod jump;
-pub mod leapmelee;
 pub mod mount;
+pub mod multi;
 pub mod music;
-pub mod rapidmelee;
-pub mod repeater;
-pub mod ripostemelee;
+pub mod pet;
 pub mod roll;
 pub mod run;
-pub mod selfbuff;
-pub mod shockwave;
-pub mod shoot;
 pub mod sit;
 pub mod sleep;
 pub mod sneak;
@@ -45,20 +32,37 @@ pub mod wield;
 
 // Reexports
 pub use self::{
-    alpha::AlphaAnimation, beam::BeamAnimation, beta::BetaAnimation, block::BlockAnimation,
-    boost::BoostAnimation, chargeswing::ChargeswingAnimation, climb::ClimbAnimation,
-    collect::CollectAnimation, combomelee::ComboAnimation, consume::ConsumeAnimation,
-    dance::DanceAnimation, dash::DashAnimation, divemelee::DiveMeleeAnimation,
-    equip::EquipAnimation, finishermelee::FinisherMeleeAnimation, glidewield::GlideWieldAnimation,
-    gliding::GlidingAnimation, idle::IdleAnimation, jump::JumpAnimation, leapmelee::LeapAnimation,
-    mount::MountAnimation, music::MusicAnimation, rapidmelee::RapidMeleeAnimation,
-    repeater::RepeaterAnimation, ripostemelee::RiposteMeleeAnimation, roll::RollAnimation,
-    run::RunAnimation, selfbuff::SelfBuffAnimation, shockwave::ShockwaveAnimation,
-    shoot::ShootAnimation, sit::SitAnimation, sleep::SleepAnimation, sneak::SneakAnimation,
-    sneakequip::SneakEquipAnimation, sneakwield::SneakWieldAnimation,
-    staggered::StaggeredAnimation, stand::StandAnimation, steer::SteerAnimation,
-    stunned::StunnedAnimation, swim::SwimAnimation, swimwield::SwimWieldAnimation,
-    talk::TalkAnimation, wallrun::WallrunAnimation, wield::WieldAnimation,
+    basic::{BasicAction, BasicActionDependency},
+    boost::BoostAnimation,
+    climb::ClimbAnimation,
+    collect::CollectAnimation,
+    consume::ConsumeAnimation,
+    dance::DanceAnimation,
+    equip::EquipAnimation,
+    glidewield::GlideWieldAnimation,
+    gliding::GlidingAnimation,
+    idle::IdleAnimation,
+    jump::JumpAnimation,
+    mount::MountAnimation,
+    multi::{MultiAction, MultiActionDependency},
+    music::MusicAnimation,
+    pet::PetAnimation,
+    roll::RollAnimation,
+    run::RunAnimation,
+    sit::SitAnimation,
+    sleep::SleepAnimation,
+    sneak::SneakAnimation,
+    sneakequip::SneakEquipAnimation,
+    sneakwield::SneakWieldAnimation,
+    staggered::StaggeredAnimation,
+    stand::StandAnimation,
+    steer::SteerAnimation,
+    stunned::StunnedAnimation,
+    swim::SwimAnimation,
+    swimwield::SwimWieldAnimation,
+    talk::TalkAnimation,
+    wallrun::WallrunAnimation,
+    wield::WieldAnimation,
 };
 use super::{make_bone, vek::*, FigureBoneData, Offsets, Skeleton, TrailSource};
 use common::comp::{
@@ -464,4 +468,63 @@ impl CharacterSkeleton {
                 * Quaternion::rotation_y(tilt * 1.0 * fast + tilt * 1.0 + fast2 * speednorm * 0.25);
         }
     }
+}
+
+pub fn hammer_start(next: &mut CharacterSkeleton, s_a: &SkeletonAttr) {
+    next.main.position = Vec3::new(0.0, 0.0, 0.0);
+    next.main.orientation = Quaternion::rotation_z(0.0);
+    next.hand_l.position = Vec3::new(s_a.hhl.0, s_a.hhl.1 + 3.0, s_a.hhl.2 - 1.0);
+    next.hand_l.orientation = Quaternion::rotation_x(s_a.hhl.3)
+        * Quaternion::rotation_y(s_a.hhl.4)
+        * Quaternion::rotation_z(s_a.hhl.5);
+    next.hand_r.position = Vec3::new(s_a.hhr.0, s_a.hhr.1 + 3.0, s_a.hhr.2 + 1.0);
+    next.hand_r.orientation = Quaternion::rotation_x(s_a.hhr.3)
+        * Quaternion::rotation_y(s_a.hhr.4)
+        * Quaternion::rotation_z(s_a.hhr.5);
+
+    next.control.position = Vec3::new(s_a.hc.0 - 1.0, s_a.hc.1, s_a.hc.2 - 3.0);
+    next.control.orientation = Quaternion::rotation_x(s_a.hc.3)
+        * Quaternion::rotation_y(s_a.hc.4)
+        * Quaternion::rotation_z(s_a.hc.5);
+}
+
+pub fn twist_back(next: &mut CharacterSkeleton, move1: f32, c: f32, h: f32, b: f32, s: f32) {
+    next.chest.orientation.rotate_z(move1 * c);
+    next.head.orientation.rotate_z(move1 * -h);
+    next.belt.orientation.rotate_z(move1 * -b);
+    next.shorts.orientation.rotate_z(move1 * -s);
+}
+
+pub fn twist_forward(next: &mut CharacterSkeleton, move2: f32, c: f32, h: f32, b: f32, s: f32) {
+    next.chest.orientation.rotate_z(move2 * -c);
+    next.head.orientation.rotate_z(move2 * h);
+    next.belt.orientation.rotate_z(move2 * b);
+    next.shorts.orientation.rotate_z(move2 * s);
+}
+
+pub fn dual_wield_start(next: &mut CharacterSkeleton) {
+    next.main.position = Vec3::new(0.0, 0.0, 0.0);
+    next.main.orientation = Quaternion::rotation_z(0.0);
+    next.second.position = Vec3::new(0.0, 0.0, 0.0);
+    next.second.orientation = Quaternion::rotation_z(0.0);
+
+    next.control_l.position =
+        next.hand_l.position * Vec3::new(0.5, 0.5, 0.3) + Vec3::new(-4.0, 0.0, 0.0);
+    next.control_l.orientation = Quaternion::lerp(
+        next.hand_l.orientation,
+        Quaternion::rotation_x(PI * -0.5),
+        0.65,
+    );
+    next.hand_l.position = Vec3::new(0.0, -2.0, 0.0);
+    next.hand_l.orientation = Quaternion::rotation_x(PI * 0.5);
+
+    next.control_r.position =
+        next.hand_r.position * Vec3::new(0.5, 0.5, 0.3) + Vec3::new(4.0, 0.0, 0.0);
+    next.control_r.orientation = Quaternion::lerp(
+        next.hand_r.orientation,
+        Quaternion::rotation_x(PI * -0.5),
+        0.65,
+    );
+    next.hand_r.position = Vec3::new(0.0, -2.0, 0.0);
+    next.hand_r.orientation = Quaternion::rotation_x(PI * 0.5);
 }

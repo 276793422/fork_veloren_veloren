@@ -115,6 +115,9 @@ pub enum Outcome {
     TerracottaStatueCharge {
         pos: Vec3<f32>,
     },
+    SurpriseEgg {
+        pos: Vec3<f32>,
+    },
     Utterance {
         pos: Vec3<f32>,
         body: comp::Body,
@@ -161,6 +164,12 @@ pub enum Outcome {
     ClayGolemDash {
         pos: Vec3<f32>,
     },
+    Bleep {
+        pos: Vec3<f32>,
+    },
+    Charge {
+        pos: Vec3<f32>,
+    },
 }
 
 impl Outcome {
@@ -182,6 +191,8 @@ impl Outcome {
             | Outcome::Whoosh { pos }
             | Outcome::Swoosh { pos }
             | Outcome::Slash { pos }
+            | Outcome::Bleep { pos }
+            | Outcome::Charge { pos }
             | Outcome::IceSpikes { pos }
             | Outcome::Steam { pos }
             | Outcome::FireShockwave { pos }
@@ -191,6 +202,7 @@ impl Outcome {
             | Outcome::FlamethrowerCharge { pos }
             | Outcome::FuseCharge { pos }
             | Outcome::TerracottaStatueCharge { pos }
+            | Outcome::SurpriseEgg { pos }
             | Outcome::LaserBeam { pos }
             | Outcome::GroundDig { pos }
             | Outcome::PortalActivated { pos }

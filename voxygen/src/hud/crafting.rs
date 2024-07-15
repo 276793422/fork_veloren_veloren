@@ -26,7 +26,7 @@ use common::{
         Inventory,
     },
     mounting::VolumePos,
-    recipe::{ComponentKey, Recipe, RecipeInput},
+    recipe::{ComponentKey, Recipe, RecipeBookManifest, RecipeInput},
     terrain::SpriteKind,
 };
 use conrod_core::{
@@ -158,6 +158,7 @@ pub struct Crafting<'a> {
     slot_manager: &'a mut SlotManager,
     item_imgs: &'a ItemImgs,
     inventory: &'a Inventory,
+    rbm: &'a RecipeBookManifest,
     msm: &'a MaterialStatManifest,
     #[conrod(common_builder)]
     common: widget::CommonBuilder,
@@ -166,6 +167,7 @@ pub struct Crafting<'a> {
 }
 
 impl<'a> Crafting<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: &'a Client,
         info: &'a HudInfo,
@@ -179,6 +181,7 @@ impl<'a> Crafting<'a> {
         slot_manager: &'a mut SlotManager,
         item_imgs: &'a ItemImgs,
         inventory: &'a Inventory,
+        rbm: &'a RecipeBookManifest,
         msm: &'a MaterialStatManifest,
         tooltip_manager: &'a mut TooltipManager,
         show: &'a mut Show,
@@ -197,6 +200,7 @@ impl<'a> Crafting<'a> {
             tooltip_manager,
             item_imgs,
             inventory,
+            rbm,
             msm,
             show,
             common: widget::CommonBuilder::default(),
@@ -263,7 +267,10 @@ impl CraftingTab {
                 _ => false,
             },
             CraftingTab::Glider => matches!(&*item.kind(), ItemKind::Glider),
-            CraftingTab::Potion => item.tags().contains(&ItemTag::Potion),
+            CraftingTab::Potion => item
+                .tags()
+                .iter()
+                .any(|tag| matches!(tag, &ItemTag::Potion | &ItemTag::Charm)),
             CraftingTab::ProcessedMaterial => item
                 .tags()
                 .iter()
@@ -594,34 +601,47 @@ impl<'a> Widget for Crafting<'a> {
         // then unavailable ones, each sorted by quality and then alphabetically
         // In the tuple, "name" is the recipe book key, and "recipe.output.0.name()"
         // is the display name (as stored in the item descriptors)
+        fn content_contains(content: &common::comp::Content, s: &str) -> bool {
+            match content {
+                common::comp::Content::Plain(p) => p.contains(s),
+                common::comp::Content::Key(k) => k.contains(s),
+                common::comp::Content::Attr(k, _) => k.contains(s),
+                common::comp::Content::Localized { key, .. } => key.contains(s),
+            }
+        }
+        let search = |item: &Arc<ItemDef>| {
+            let (name_key, _) = item.i18n(self.item_i18n);
+            let fallback_name = self
+                .localized_strings
+                .get_content_fallback(&name_key)
+                .to_lowercase();
+            let name = self.localized_strings.get_content(&name_key).to_lowercase();
+
+            search_keys.iter().all(|&substring| {
+                name.contains(substring)
+                    || fallback_name.contains(substring)
+                    || content_contains(&name_key, substring)
+            })
+        };
         let mut ordered_recipes: Vec<_> = self
-            .client
-            .recipe_book()
-            .iter()
+            .inventory
+            .available_recipes_iter(self.rbm)
             .filter(|(_, recipe)| match search_filter {
                 SearchFilter::None => {
-                    #[allow(deprecated)]
-                    let output_name = recipe.output.0.name().to_lowercase();
-                    search_keys
-                        .iter()
-                        .all(|&substring| output_name.contains(substring))
+                    search(&recipe.output.0)
                 },
                 SearchFilter::Input => recipe.inputs().any(|(input, _, _)| {
-                    let search = |input_name: &str| {
-                        let input_name = input_name.to_lowercase();
+                    let search_tag = |name: &str| {
                         search_keys
                             .iter()
-                            .all(|&substring| input_name.contains(substring))
+                            .all(|&substring| name.contains(substring))
                     };
-
                     match input {
-                        #[allow(deprecated)]
-                        RecipeInput::Item(def) => search(&def.name()),
-                        RecipeInput::Tag(tag) => search(tag.name()),
-                        RecipeInput::TagSameItem(tag) => search(tag.name()),
-                        #[allow(deprecated)]
+                        RecipeInput::Item(def) => search(def),
+                        RecipeInput::Tag(tag) => search_tag(tag.name()),
+                        RecipeInput::TagSameItem(tag) => search_tag(tag.name()),
                         RecipeInput::ListSameItem(defs) => {
-                            defs.iter().any(|def| search(&def.name()))
+                            defs.iter().any(search)
                         },
                     }
                 }),
@@ -682,7 +702,7 @@ impl<'a> Widget for Crafting<'a> {
         });
 
         // Recipe list
-        let recipe_list_length = self.client.recipe_book().iter().len() + pseudo_entries.len();
+        let recipe_list_length = self.inventory.recipe_book_len() + pseudo_entries.len();
         if state.ids.recipe_list_btns.len() < recipe_list_length {
             state.update(|state| {
                 state
@@ -855,9 +875,8 @@ impl<'a> Widget for Crafting<'a> {
                 {
                     Some((selected_recipe, *modular_recipe))
                 } else {
-                    self.client
-                        .recipe_book()
-                        .get(selected_recipe)
+                    self.inventory
+                        .get_recipe(selected_recipe, self.rbm)
                         .map(|r| (selected_recipe, r))
                 }
             },
@@ -941,7 +960,7 @@ impl<'a> Widget for Crafting<'a> {
             };
 
             // Output slot, tags, and modular input slots
-            let (craft_slot_1, craft_slot_2, can_perform) = match recipe_kind {
+            let (craft_slot_1, craft_slot_2, can_perform, recipe_known) = match recipe_kind {
                 RecipeKind::ModularWeapon | RecipeKind::Component(_) => {
                     if state.ids.craft_slots.len() < 2 {
                         state.update(|s| {
@@ -1168,9 +1187,9 @@ impl<'a> Widget for Crafting<'a> {
                     let ability_map = &AbilityMap::load().read();
                     let msm = &MaterialStatManifest::load().read();
 
-                    let output_item = match recipe_kind {
+                    let (output_item, recipe_known) = match recipe_kind {
                         RecipeKind::ModularWeapon => {
-                            if let Some((primary_comp, toolkind, hand_restriction)) =
+                            let item = if let Some((primary_comp, toolkind, hand_restriction)) =
                                 primary_slot.item(self.inventory).and_then(|item| {
                                     if let ItemKind::ModularComponent(
                                         ModularComponent::ToolPrimaryComponent {
@@ -1184,8 +1203,7 @@ impl<'a> Widget for Crafting<'a> {
                                     } else {
                                         None
                                     }
-                                })
-                            {
+                                }) {
                                 secondary_slot
                                     .item(self.inventory)
                                     .filter(|item| {
@@ -1209,7 +1227,8 @@ impl<'a> Widget for Crafting<'a> {
                                     })
                             } else {
                                 None
-                            }
+                            };
+                            (item, true)
                         },
                         RecipeKind::Component(toolkind) => {
                             if let Some(material) =
@@ -1226,16 +1245,22 @@ impl<'a> Widget for Crafting<'a> {
                                         },
                                     ),
                                 };
-                                self.client.component_recipe_book().get(&component_key).map(
-                                    |component_recipe| {
-                                        component_recipe.item_output(ability_map, msm)
-                                    },
-                                )
+                                self.client
+                                    .component_recipe_book()
+                                    .get(&component_key)
+                                    .map(|component_recipe| {
+                                        let item = component_recipe.item_output(ability_map, msm);
+                                        let learned = self
+                                            .inventory
+                                            .recipe_is_known(&component_recipe.recipe_book_key);
+                                        (item, learned)
+                                    })
+                                    .map_or((None, true), |(item, known)| (Some(item), known))
                             } else {
-                                None
+                                (None, true)
                             }
                         },
-                        RecipeKind::Simple | RecipeKind::Repair => None,
+                        RecipeKind::Simple | RecipeKind::Repair => (None, true),
                     };
 
                     if let Some(output_item) = output_item {
@@ -1267,6 +1292,7 @@ impl<'a> Widget for Crafting<'a> {
                             secondary_slot.slot,
                             self.show.crafting_fields.craft_sprite.map(|(_, s)| s)
                                 == recipe.craft_sprite,
+                            recipe_known,
                         )
                     } else {
                         Text::new(&self.localized_strings.get_msg("hud-crafting-modular_desc"))
@@ -1281,7 +1307,7 @@ impl<'a> Widget for Crafting<'a> {
                             .w_h(70.0, 70.0)
                             .graphics_for(state.ids.output_img)
                             .set(state.ids.modular_wep_empty_bg, ui);
-                        (primary_slot.slot, secondary_slot.slot, false)
+                        (primary_slot.slot, secondary_slot.slot, false, recipe_known)
                     }
                 },
                 RecipeKind::Simple => {
@@ -1384,6 +1410,7 @@ impl<'a> Widget for Crafting<'a> {
                                         == self.show.crafting_fields.craft_sprite.map(|(_, s)| s)
                                 })
                             }),
+                        true,
                     )
                 },
                 RecipeKind::Repair => {
@@ -1516,12 +1543,16 @@ impl<'a> Widget for Crafting<'a> {
 
                     let can_perform = repair_slot.item(self.inventory).map_or(false, can_repair);
 
-                    (repair_slot.slot, None, can_perform)
+                    (repair_slot.slot, None, can_perform, true)
                 },
             };
 
             // Craft button
-            if Button::image(self.imgs.button)
+            let label = &match recipe_kind {
+                RecipeKind::Repair => self.localized_strings.get_msg("hud-crafting-repair"),
+                _ => self.localized_strings.get_msg("hud-crafting-craft"),
+            };
+            let craft_button_init = Button::image(self.imgs.button)
                 .w_h(105.0, 25.0)
                 .hover_image(if can_perform {
                     self.imgs.button_hover
@@ -1533,10 +1564,7 @@ impl<'a> Widget for Crafting<'a> {
                 } else {
                     self.imgs.button
                 })
-                .label(&match recipe_kind {
-                    RecipeKind::Repair => self.localized_strings.get_msg("hud-crafting-repair"),
-                    _ => self.localized_strings.get_msg("hud-crafting-craft"),
-                })
+                .label(label)
                 .label_y(conrod_core::position::Relative::Scalar(1.0))
                 .label_color(if can_perform {
                     TEXT_COLOR
@@ -1551,11 +1579,27 @@ impl<'a> Widget for Crafting<'a> {
                     TEXT_GRAY_COLOR
                 })
                 .bottom_left_with_margins_on(state.ids.align_ing, -31.0, 15.0)
-                .parent(state.ids.window_frame)
-                .set(state.ids.btn_craft, ui)
-                .was_clicked()
-                && can_perform
-            {
+                .parent(state.ids.window_frame);
+
+            let craft_button = if !recipe_known {
+                craft_button_init
+                    .with_tooltip(
+                        self.tooltip_manager,
+                        &self
+                            .localized_strings
+                            .get_msg("hud-crafting-recipe-uncraftable"),
+                        &self
+                            .localized_strings
+                            .get_msg("hud-crafting-recipe-unlearned"),
+                        &tabs_tooltip,
+                        TEXT_COLOR,
+                    )
+                    .set(state.ids.btn_craft, ui)
+            } else {
+                craft_button_init.set(state.ids.btn_craft, ui)
+            };
+
+            if craft_button.was_clicked() && can_perform {
                 match recipe_kind {
                     RecipeKind::ModularWeapon => {
                         if let (

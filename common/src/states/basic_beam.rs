@@ -7,7 +7,7 @@ use crate::{
         beam,
         body::{biped_large, bird_large, golem},
         character_state::OutputEvents,
-        object::Body::Flamethrower,
+        object::Body::{Flamethrower, Lavathrower},
         Body, CharacterState, Ori, StateUpdate,
     },
     event::LocalEvent,
@@ -101,17 +101,14 @@ impl CharacterBehavior for Data {
                         timer: tick_attack_or_default(data, self.timer, None),
                         ..*self
                     });
-                    if let Body::Object(object) = data.body {
-                        if object == &Flamethrower {
-                            // Send local event used for frontend shenanigans
-                            output_events.emit_local(LocalEvent::CreateOutcome(
-                                Outcome::FlamethrowerCharge {
-                                    pos: data.pos.0
-                                        + *data.ori.look_dir() * (data.body.max_radius()),
-                                },
-                            ));
-                        }
-                    };
+                    if matches!(data.body, Body::Object(Flamethrower | Lavathrower)) {
+                        // Send local event used for frontend shenanigans
+                        output_events.emit_local(LocalEvent::CreateOutcome(
+                            Outcome::FlamethrowerCharge {
+                                pos: data.pos.0 + *data.ori.look_dir() * (data.body.max_radius()),
+                            },
+                        ));
+                    }
                 } else {
                     let attack = {
                         let energy = AttackEffect::new(
@@ -219,7 +216,11 @@ impl CharacterBehavior for Data {
             StageSection::Recover => {
                 if self.timer < self.static_data.recover_duration {
                     update.character = CharacterState::BasicBeam(Data {
-                        timer: tick_attack_or_default(data, self.timer, None),
+                        timer: tick_attack_or_default(
+                            data,
+                            self.timer,
+                            Some(data.stats.recovery_speed_modifier),
+                        ),
                         ..*self
                     });
                 } else {

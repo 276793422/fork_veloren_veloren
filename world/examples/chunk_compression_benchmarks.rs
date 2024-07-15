@@ -20,7 +20,7 @@ use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     mem,
     sync::Arc,
     time::Instant,
@@ -29,7 +29,7 @@ use tracing::{debug, trace};
 use vek::*;
 use veloren_world::{
     civ::SiteKind,
-    sim::{FileOpts, WorldOpts, DEFAULT_WORLD_MAP},
+    sim::{FileOpts, WorldOpts, DEFAULT_WORLD_MAP, DEFAULT_WORLD_SEED},
     World,
 };
 
@@ -205,7 +205,7 @@ impl VoxelImageEncoding for PngEncoding {
             ws.0.as_raw(),
             ws.0.width(),
             ws.0.height(),
-            image::ColorType::Rgba8,
+            image::ExtendedColorType::Rgba8,
         )
         .ok()?;
         Some((buf, ws.1.clone()))
@@ -308,8 +308,13 @@ impl VoxelImageEncoding for MixedEncoding {
                 CompressionType::Fast,
                 FilterType::Up,
             );
-            png.write_image(x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(
+                x.as_raw(),
+                x.width(),
+                x.height(),
+                image::ExtendedColorType::L8,
+            )
+            .ok()?;
             indices[i] = buf.len();
             Some(())
         };
@@ -337,14 +342,14 @@ impl VoxelImageDecoding for MixedEncoding {
             indices[2]..indices[3],
             indices[3]..quad.len(),
         ];
-        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()]).ok()?)?;
-        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()]).ok()?)?;
-        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()]).ok()?)?;
+        let a = image_from_bytes(PngDecoder::new(Cursor::new(&quad[ranges[0].clone()])).ok()?)?;
+        let b = image_from_bytes(PngDecoder::new(Cursor::new(&quad[ranges[1].clone()])).ok()?)?;
+        let c = image_from_bytes(PngDecoder::new(Cursor::new(&quad[ranges[2].clone()])).ok()?)?;
         let sprite_data =
             bincode::deserialize::<CompressedData<Vec<[u8; 3]>>>(&quad[ranges[4].clone()])
                 .ok()?
                 .decompress()?;
-        let d = image_from_bytes(JpegDecoder::new(&quad[ranges[3].clone()]).ok()?)?;
+        let d = image_from_bytes(JpegDecoder::new(Cursor::new(&quad[ranges[3].clone()])).ok()?)?;
         Some((a, b, c, d, sprite_data))
     }
 
@@ -417,7 +422,7 @@ impl VoxelImageEncoding for MixedEncodingSparseSprites {
             ws.0.as_raw(),
             ws.0.width(),
             ws.0.height(),
-            image::ColorType::L8,
+            image::ExtendedColorType::L8,
         )
         .ok()?;
         let index = buf.len();
@@ -474,8 +479,13 @@ impl VoxelImageEncoding for MixedEncodingDenseSprites {
                 CompressionType::Fast,
                 FilterType::Up,
             );
-            png.write_image(x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(
+                x.as_raw(),
+                x.width(),
+                x.height(),
+                image::ExtendedColorType::L8,
+            )
+            .ok()?;
             indices[i] = buf.len();
             Some(())
         };
@@ -493,7 +503,8 @@ impl VoxelImageEncoding for MixedEncodingDenseSprites {
     }
 }
 
-use kiddo::KdTree;
+use fixed::types::U32F0;
+use kiddo::fixed::{distance::SquaredEuclidean, kdtree::KdTree};
 use rstar::{PointDistance, RTree, RTreeObject, RTreeParams};
 
 #[derive(Debug)]
@@ -548,17 +559,16 @@ lazy_static::lazy_static! {
             })
             .collect()
     };
-    pub static ref PALETTE_KDTREE: HashMap<BlockKind, KdTree<f32, u8, 3>> = {
+    pub static ref PALETTE_KDTREE: HashMap<BlockKind, KdTree<U32F0, u16, 3, 32, u32>> = {
         let ron_bytes = include_bytes!("palettes.ron");
         let palettes: HashMap<BlockKind, Vec<Rgb<u8>>> =
             ron::de::from_bytes(ron_bytes).expect("palette should parse");
         palettes
             .into_iter()
             .map(|(k, v)| {
-                let mut tree = KdTree::new();
+                let mut tree: KdTree<U32F0, u16, 3, 32, u32> = KdTree::new();
                 for (i, rgb) in v.into_iter().enumerate() {
-                    tree.add(&[rgb.r as f32, rgb.g as f32, rgb.b as f32], i as u8)
-                        .expect("kdtree insert should succeed");
+                    tree.add(&[U32F0::from(rgb.r), U32F0::from(rgb.g), U32F0::from(rgb.b)], i as u16);
                 }
                 (k, tree)
             })
@@ -570,14 +580,18 @@ pub trait NearestNeighbor {
     fn nearest_neighbor(&self, x: &Rgb<u8>) -> Option<u8>;
 }
 
-impl NearestNeighbor for KdTree<f32, u8, 3> {
+impl NearestNeighbor for KdTree<U32F0, u16, 3, 32, u32> {
     fn nearest_neighbor(&self, x: &Rgb<u8>) -> Option<u8> {
-        self.nearest_one(
-            &[x.r as f32, x.g as f32, x.b as f32],
-            &kiddo::distance::squared_euclidean,
+        Some(
+            self.nearest_one::<SquaredEuclidean>(&[
+                U32F0::from(x.r),
+                U32F0::from(x.g),
+                U32F0::from(x.b),
+            ])
+            .item
+            .try_into()
+            .unwrap(),
         )
-        .map(|(_, i)| *i)
-        .ok()
     }
 }
 
@@ -646,8 +660,13 @@ impl<'a, NN: NearestNeighbor, const N: u32> VoxelImageEncoding for PaletteEncodi
                 CompressionType::Fast,
                 FilterType::Up,
             );
-            png.write_image(x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(
+                x.as_raw(),
+                x.width(),
+                x.height(),
+                image::ExtendedColorType::L8,
+            )
+            .ok()?;
             indices[i] = buf.len();
             Some(())
         };
@@ -682,7 +701,7 @@ fn main() {
     common_frontend::init_stdout(None);
     println!("Loading world");
     let (world, index) = World::generate(
-        59686,
+        DEFAULT_WORLD_SEED,
         WorldOpts {
             seed_elements: true,
             world_file: FileOpts::LoadAsset(DEFAULT_WORLD_MAP.into()),
@@ -1224,12 +1243,7 @@ fn main() {
                 }
                 trace!(
                     "{} {}: uncompressed: {}, {:?} {} {:?}",
-                    spiralpos.x,
-                    spiralpos.y,
-                    n,
-                    sizes,
-                    best_idx,
-                    timings
+                    spiralpos.x, spiralpos.y, n, sizes, best_idx, timings
                 );
                 for (name, size) in sizes.iter() {
                     *totals.entry(name).or_default() += size;

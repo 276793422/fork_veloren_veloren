@@ -372,6 +372,7 @@ impl Block {
                 | SpriteKind::CoralChest
                 | SpriteKind::HaniwaUrn
                 | SpriteKind::TerracottaChest
+                | SpriteKind::SahaginChest
                 | SpriteKind::Crate => Some(rtsim::ChunkResource::Loot),
             _ => None,
         }
@@ -388,8 +389,11 @@ impl Block {
                 SpriteKind::Ember | SpriteKind::FireBlock => 20,
                 SpriteKind::WallLamp
                 | SpriteKind::WallLampSmall
+                | SpriteKind::WallLampWizard
+                | SpriteKind::WallLampMesa
                 | SpriteKind::WallSconce
                 | SpriteKind::FireBowlGround
+                | SpriteKind::MesaLantern
                 | SpriteKind::ChristmasOrnament
                 | SpriteKind::CliffDecorBlock
                 | SpriteKind::Orb
@@ -431,7 +435,6 @@ impl Block {
                 SpriteKind::SeashellLantern | SpriteKind::GlowIceCrystal => 16,
                 SpriteKind::SeaDecorEmblem => 12,
                 SpriteKind::SeaDecorBlock | SpriteKind::HaniwaKeyDoor => 10,
-                SpriteKind::Mine => 2,
                 _ => return None,
             },
         };
@@ -531,6 +534,7 @@ impl Block {
                 | SpriteKind::HaniwaTrapTriggered
                 | SpriteKind::ChestBuried
                 | SpriteKind::TerracottaChest
+                | SpriteKind::SahaginChest
                 | SpriteKind::SeaDecorBlock
                 | SpriteKind::SeaDecorChain
                 | SpriteKind::SeaDecorWindowHor
@@ -541,6 +545,8 @@ impl Block {
                 | SpriteKind::FireBlock
                 | SpriteKind::GlassBarrier
                 | SpriteKind::GlassKeyhole
+                | SpriteKind::SahaginKeyhole
+                | SpriteKind::SahaginKeyDoor
                 | SpriteKind::TerracottaKeyDoor
                 | SpriteKind::TerracottaKeyhole
                 | SpriteKind::TerracottaStatue
@@ -584,11 +590,7 @@ impl Block {
     pub fn is_bonkable(&self) -> bool {
         match self.get_sprite() {
             Some(
-                SpriteKind::Apple
-                | SpriteKind::Beehive
-                | SpriteKind::Coconut
-                | SpriteKind::Bomb
-                | SpriteKind::Mine,
+                SpriteKind::Apple | SpriteKind::Beehive | SpriteKind::Coconut | SpriteKind::Bomb,
             ) => self.is_solid(),
             _ => false,
         }

@@ -1,6 +1,8 @@
 //! # Implementing new commands.
 //! To implement a new command provide a handler function
 //! in [do_command].
+#[cfg(feature = "worldgen")]
+use crate::weather::WeatherJob;
 use crate::{
     client::Client,
     location::Locations,
@@ -10,7 +12,6 @@ use crate::{
         SettingError, WhitelistInfo, WhitelistRecord,
     },
     sys::terrain::SpawnEntityData,
-    weather::WeatherJob,
     wiring,
     wiring::OutputFormula,
     Server, Settings, StateExt,
@@ -29,7 +30,7 @@ use common::{
     comp::{
         self,
         aura::{AuraKindVariant, AuraTarget},
-        buff::{Buff, BuffData, BuffKind, BuffSource, MiscBuffData},
+        buff::{Buff, BuffData, BuffKind, BuffSource, DestInfo, MiscBuffData},
         inventory::{
             item::{all_items_expect, tool::AbilityMap, MaterialStatManifest, Quality},
             slot::Slot,
@@ -53,13 +54,16 @@ use common::{
     parse_cmd_args,
     resources::{BattleMode, PlayerPhysicsSettings, ProgramTime, Secs, Time, TimeOfDay, TimeScale},
     rtsim::{Actor, Role},
-    terrain::{Block, BlockKind, CoordinateConversions, SpriteKind, TerrainChunkSize},
+    spiral::Spiral2d,
+    terrain::{Block, BlockKind, CoordinateConversions, SpriteKind},
     tether::Tethered,
     uid::Uid,
     vol::ReadVol,
-    weather, Damage, DamageKind, DamageSource, Explosion, GroupTarget, LoadoutBuilder,
+    CachedSpatialGrid, Damage, DamageKind, DamageSource, Explosion, GroupTarget, LoadoutBuilder,
     RadiusEffect,
 };
+#[cfg(feature = "worldgen")]
+use common::{terrain::TerrainChunkSize, weather};
 use common_net::{
     msg::{DisconnectReason, Notification, PlayerListUpdate, ServerGeneral},
     sync::WorldSyncExt,
@@ -70,9 +74,10 @@ use hashbrown::{HashMap, HashSet};
 use humantime::Duration as HumanDuration;
 use rand::{thread_rng, Rng};
 use specs::{storage::StorageEntry, Builder, Entity as EcsEntity, Join, LendJoin, WorldExt};
-use std::{fmt::Write, ops::DerefMut, str::FromStr, sync::Arc, time::Duration};
+use std::{fmt::Write, num::NonZeroU32, ops::DerefMut, str::FromStr, sync::Arc, time::Duration};
 use vek::*;
 use wiring::{Circuit, Wire, WireNode, WiringAction, WiringActionEffect, WiringElement};
+#[cfg(feature = "worldgen")]
 use world::util::{Sampler, LOCALITY};
 
 use common::comp::Alignment;
@@ -103,9 +108,9 @@ type CmdResult<T> = Result<T, Content>;
 ///   This differs from the previous argument when using /sudo
 /// * `Vec<String>` - a `Vec<String>` containing the arguments of the command
 ///   after the keyword.
-/// * `&ChatCommand` - the command to execute with the above arguments.
-/// Handler functions must parse arguments from the the given `String`
-/// (`parse_args!` exists for this purpose).
+/// * `&ChatCommand` - the command to execute with the above arguments --
+///   Handler functions must parse arguments from the the given `String`
+///   (`parse_args!` exists for this purpose).
 ///
 /// # Returns
 ///
@@ -145,6 +150,7 @@ fn do_command(
         ServerChatCommand::Buff => handle_buff,
         ServerChatCommand::Build => handle_build,
         ServerChatCommand::Campfire => handle_spawn_campfire,
+        ServerChatCommand::ClearPersistedTerrain => handle_clear_persisted_terrain,
         ServerChatCommand::DebugColumn => handle_debug_column,
         ServerChatCommand::DebugWays => handle_debug_ways,
         ServerChatCommand::DisconnectAllPlayers => handle_disconnect_all_players,
@@ -178,6 +184,7 @@ fn do_command(
         ServerChatCommand::PermitBuild => handle_permit_build,
         ServerChatCommand::Players => handle_players,
         ServerChatCommand::Portal => handle_spawn_portal,
+        ServerChatCommand::ResetRecipes => handle_reset_recipes,
         ServerChatCommand::Region => handle_region,
         ServerChatCommand::ReloadChunks => handle_reload_chunks,
         ServerChatCommand::RemoveLights => handle_remove_lights,
@@ -927,8 +934,20 @@ fn handle_goto(
     }
 }
 
+#[cfg(not(feature = "worldgen"))]
+fn handle_site(
+    _server: &mut Server,
+    _client: EcsEntity,
+    _target: EcsEntity,
+    _args: Vec<String>,
+    _action: &ServerChatCommand,
+) -> CmdResult<()> {
+    Err("Unsupported without worldgen enabled".into())
+}
+
 /// TODO: Add autocompletion if possible (might require modifying enum to handle
 /// dynamic values).
+#[cfg(feature = "worldgen")]
 fn handle_site(
     server: &mut Server,
     _client: EcsEntity,
@@ -936,7 +955,6 @@ fn handle_site(
     args: Vec<String>,
     action: &ServerChatCommand,
 ) -> CmdResult<()> {
-    #[cfg(feature = "worldgen")]
     if let (Some(dest_name), dismount_volume) = parse_cmd_args!(args, String, bool) {
         let site = server
             .world
@@ -962,9 +980,6 @@ fn handle_site(
     } else {
         Err(Content::Plain(action.help_string()))
     }
-
-    #[cfg(not(feature = "worldgen"))]
-    Ok(())
 }
 
 fn handle_respawn(
@@ -2010,6 +2025,57 @@ fn handle_spawn_campfire(
     Ok(())
 }
 
+#[cfg(feature = "persistent_world")]
+fn handle_clear_persisted_terrain(
+    server: &mut Server,
+    _client: EcsEntity,
+    target: EcsEntity,
+    args: Vec<String>,
+    action: &ServerChatCommand,
+) -> CmdResult<()> {
+    let Some(radius) = parse_cmd_args!(args, i32) else {
+        return Err(Content::Plain(action.help_string()));
+    };
+    // Clamp the radius to prevent accidentally passing too large radiuses
+    let radius = radius.clamp(0, 64);
+
+    let pos = position(server, target, "target")?;
+    let chunk_key = server.state.terrain().pos_key(pos.0.as_());
+
+    let mut terrain_persistence2 = server
+        .state
+        .ecs()
+        .try_fetch_mut::<crate::terrain_persistence::TerrainPersistence>();
+    if let Some(ref mut terrain_persistence) = terrain_persistence2 {
+        for offset in Spiral2d::with_radius(radius) {
+            let chunk_key = chunk_key + offset;
+            terrain_persistence.clear_chunk(chunk_key);
+        }
+
+        drop(terrain_persistence2);
+        reload_chunks_inner(server, pos.0, Some(radius));
+
+        Ok(())
+    } else {
+        Err(Content::localized(
+            "command-experimental-terrain-persistence-disabled",
+        ))
+    }
+}
+
+#[cfg(not(feature = "persistent_world"))]
+fn handle_clear_persisted_terrain(
+    _server: &mut Server,
+    _client: EcsEntity,
+    _target: EcsEntity,
+    _args: Vec<String>,
+    _action: &ServerChatCommand,
+) -> CmdResult<()> {
+    Err(Content::localized(
+        "command-server-no-experimental-terrain-persistence",
+    ))
+}
+
 fn handle_safezone(
     server: &mut Server,
     client: EcsEntity,
@@ -2413,15 +2479,20 @@ fn parse_alignment(owner: Uid, alignment: &str) -> CmdResult<Alignment> {
 fn handle_kill_npcs(
     server: &mut Server,
     client: EcsEntity,
-    _target: EcsEntity,
+    target: EcsEntity,
     args: Vec<String>,
     _action: &ServerChatCommand,
 ) -> CmdResult<()> {
-    let kill_pets = if let Some(kill_option) = parse_cmd_args!(args, String) {
+    let (radius, options) = parse_cmd_args!(args, f32, String);
+    let kill_pets = if let Some(kill_option) = options {
         kill_option.contains("--also-pets")
     } else {
         false
     };
+
+    let position = radius
+        .map(|_| position(server, target, "target"))
+        .transpose()?;
 
     let to_kill = {
         let ecs = server.state.ecs();
@@ -2432,40 +2503,78 @@ fn handle_kill_npcs(
         let alignments = ecs.read_storage::<Alignment>();
         let rtsim_entities = ecs.read_storage::<common::rtsim::RtSimEntity>();
         let mut rtsim = ecs.write_resource::<crate::rtsim::RtSim>();
+        let spatial_grid;
 
-        (
-            &entities,
-            &healths,
-            !&players,
-            alignments.maybe(),
-            &positions,
-        )
-            .join()
-            .filter_map(|(entity, _health, (), alignment, pos)| {
-                let should_kill = kill_pets
-                    || if let Some(Alignment::Owned(owned)) = alignment {
-                        ecs.entity_from_uid(*owned)
-                            .map_or(true, |owner| !players.contains(owner))
-                    } else {
-                        true
-                    };
+        let mut iter_a;
+        let mut iter_b;
 
-                if should_kill {
-                    if let Some(rtsim_entity) = rtsim_entities.get(entity).copied() {
-                        rtsim.hook_rtsim_actor_death(
-                            &ecs.read_resource::<Arc<world::World>>(),
-                            ecs.read_resource::<world::IndexOwned>().as_index_ref(),
-                            Actor::Npc(rtsim_entity.0),
-                            Some(pos.0),
-                            None,
-                        );
-                    }
-                    Some(entity)
+        let iter: &mut dyn Iterator<
+            Item = (
+                EcsEntity,
+                &comp::Health,
+                (),
+                Option<&comp::Alignment>,
+                &comp::Pos,
+            ),
+        > = if let (Some(radius), Some(position)) = (radius, position) {
+            spatial_grid = ecs.read_resource::<CachedSpatialGrid>();
+            iter_a = spatial_grid
+                .0
+                .in_circle_aabr(position.0.xy(), radius)
+                .filter_map(|entity| {
+                    (
+                        &entities,
+                        &healths,
+                        !&players,
+                        alignments.maybe(),
+                        &positions,
+                    )
+                        .lend_join()
+                        .get(entity, &entities)
+                })
+                .filter(move |(_, _, _, _, pos)| {
+                    pos.0.distance_squared(position.0) <= radius.powi(2)
+                });
+
+            &mut iter_a as _
+        } else {
+            iter_b = (
+                &entities,
+                &healths,
+                !&players,
+                alignments.maybe(),
+                &positions,
+            )
+                .join();
+
+            &mut iter_b as _
+        };
+
+        iter.filter_map(|(entity, _health, (), alignment, pos)| {
+            let should_kill = kill_pets
+                || if let Some(Alignment::Owned(owned)) = alignment {
+                    ecs.entity_from_uid(*owned)
+                        .map_or(true, |owner| !players.contains(owner))
                 } else {
-                    None
+                    true
+                };
+
+            if should_kill {
+                if let Some(rtsim_entity) = rtsim_entities.get(entity).copied() {
+                    rtsim.hook_rtsim_actor_death(
+                        &ecs.read_resource::<Arc<world::World>>(),
+                        ecs.read_resource::<world::IndexOwned>().as_index_ref(),
+                        Actor::Npc(rtsim_entity.0),
+                        Some(pos.0),
+                        None,
+                    );
                 }
-            })
-            .collect::<Vec<_>>()
+                Some(entity)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
     };
     let count = to_kill.len();
     for entity in to_kill {
@@ -2595,7 +2704,7 @@ fn push_item(
     item_id: KitEntry,
     quantity: u32,
     server: &Server,
-    push: &mut dyn FnMut(Item) -> Result<(), Item>,
+    push: &mut dyn FnMut(Item) -> Result<(), (Item, Option<NonZeroU32>)>,
 ) -> CmdResult<()> {
     let items = match item_id {
         KitEntry::Spec(KitSpec::Item(item_id)) => vec![
@@ -3256,6 +3365,27 @@ fn handle_group_promote(
     }
 }
 
+fn handle_reset_recipes(
+    server: &mut Server,
+    _client: EcsEntity,
+    target: EcsEntity,
+    _args: Vec<String>,
+    action: &ServerChatCommand,
+) -> CmdResult<()> {
+    if let Some(mut inventory) = server
+        .state
+        .ecs()
+        .write_storage::<comp::Inventory>()
+        .get_mut(target)
+    {
+        inventory.reset_recipes();
+        server.notify_client(target, ServerGeneral::UpdateRecipes);
+        Ok(())
+    } else {
+        Err(Content::Plain(action.help_string()))
+    }
+}
+
 fn handle_region(
     server: &mut Server,
     client: EcsEntity,
@@ -3379,9 +3509,9 @@ fn handle_join_faction(
 
 #[cfg(not(feature = "worldgen"))]
 fn handle_debug_column(
-    server: &mut Server,
-    client: EcsEntity,
-    target: EcsEntity,
+    _server: &mut Server,
+    _client: EcsEntity,
+    _target: EcsEntity,
     _args: Vec<String>,
     _action: &ServerChatCommand,
 ) -> CmdResult<()> {
@@ -3473,9 +3603,9 @@ cliff_height {:?} "#,
 
 #[cfg(not(feature = "worldgen"))]
 fn handle_debug_ways(
-    server: &mut Server,
-    client: EcsEntity,
-    target: EcsEntity,
+    _server: &mut Server,
+    _client: EcsEntity,
+    _target: EcsEntity,
     _args: Vec<String>,
     _action: &ServerChatCommand,
 ) -> CmdResult<()> {
@@ -3605,20 +3735,60 @@ fn parse_skill_tree(skill_tree: &str) -> CmdResult<comp::skillset::SkillGroupKin
     }
 }
 
+fn reload_chunks_inner(server: &mut Server, pos: Vec3<f32>, radius: Option<i32>) -> usize {
+    let mut removed = 0;
+
+    if let Some(radius) = radius {
+        let chunk_key = server.state.terrain().pos_key(pos.as_());
+
+        for key_offset in Spiral2d::with_radius(radius) {
+            let chunk_key = chunk_key + key_offset;
+
+            #[cfg(feature = "persistent_world")]
+            server
+                .state
+                .ecs()
+                .try_fetch_mut::<crate::terrain_persistence::TerrainPersistence>()
+                .map(|mut terrain_persistence| terrain_persistence.unload_chunk(chunk_key));
+            if server.state.remove_chunk(chunk_key) {
+                removed += 1;
+            }
+        }
+    } else {
+        #[cfg(feature = "persistent_world")]
+        server
+            .state
+            .ecs()
+            .try_fetch_mut::<crate::terrain_persistence::TerrainPersistence>()
+            .map(|mut terrain_persistence| terrain_persistence.unload_all());
+        removed = server.state.clear_terrain();
+    }
+
+    removed
+}
+
 fn handle_reload_chunks(
     server: &mut Server,
-    _client: EcsEntity,
-    _target: EcsEntity,
-    _args: Vec<String>,
+    client: EcsEntity,
+    target: EcsEntity,
+    args: Vec<String>,
     _action: &ServerChatCommand,
 ) -> CmdResult<()> {
-    #[cfg(feature = "persistent_world")]
-    server
-        .state
-        .ecs()
-        .try_fetch_mut::<crate::terrain_persistence::TerrainPersistence>()
-        .map(|mut terrain_persistence| terrain_persistence.unload_all());
-    server.state.clear_terrain();
+    let radius = parse_cmd_args!(args, i32);
+
+    let pos = position(server, target, "target")?.0;
+    let removed = reload_chunks_inner(server, pos, radius.map(|radius| radius.clamp(0, 64)));
+
+    server.notify_client(
+        client,
+        ServerGeneral::server_msg(
+            ChatType::CommandInfo,
+            Content::localized_with_args("command-reloaded-chunks", [(
+                "reloaded",
+                removed.to_string(),
+            )]),
+        ),
+    );
 
     Ok(())
 }
@@ -4402,7 +4572,14 @@ fn build_buff(
             | BuffKind::Poisoned
             | BuffKind::Parried
             | BuffKind::PotionSickness
-            | BuffKind::Heatstroke => {
+            | BuffKind::Heatstroke
+            | BuffKind::ScornfulTaunt
+            | BuffKind::Rooted
+            | BuffKind::Winded
+            | BuffKind::Concussion
+            | BuffKind::Staggered
+            | BuffKind::Tenacity
+            | BuffKind::Resilience => {
                 if buff_kind.is_simple() {
                     unreachable!("is_simple() above")
                 } else {
@@ -4419,8 +4596,13 @@ fn cast_buff(buffkind: BuffKind, data: BuffData, server: &mut Server, target: Ec
     let ecs = &server.state.ecs();
     let mut buffs_all = ecs.write_storage::<comp::Buffs>();
     let stats = ecs.read_storage::<comp::Stats>();
+    let masses = ecs.read_storage::<comp::Mass>();
     let time = ecs.read_resource::<Time>();
     if let Some(mut buffs) = buffs_all.get_mut(target) {
+        let dest_info = DestInfo {
+            stats: stats.get(target),
+            mass: masses.get(target),
+        };
         buffs.insert(
             Buff::new(
                 buffkind,
@@ -4428,7 +4610,8 @@ fn cast_buff(buffkind: BuffKind, data: BuffData, server: &mut Server, target: Ec
                 vec![],
                 BuffSource::Command,
                 *time,
-                stats.get(target),
+                dest_info,
+                None,
             ),
             *time,
         );
@@ -4592,6 +4775,18 @@ fn handle_delete_location(
     }
 }
 
+#[cfg(not(feature = "worldgen"))]
+fn handle_weather_zone(
+    _server: &mut Server,
+    _client: EcsEntity,
+    _target: EcsEntity,
+    _args: Vec<String>,
+    _action: &ServerChatCommand,
+) -> CmdResult<()> {
+    Err("Unsupported without worldgen enabled".into())
+}
+
+#[cfg(feature = "worldgen")]
 fn handle_weather_zone(
     server: &mut Server,
     client: EcsEntity,

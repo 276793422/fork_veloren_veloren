@@ -37,7 +37,7 @@ use common::{
     lod,
     mounting::{Rider, VolumePos, VolumeRider},
     outcome::Outcome,
-    recipe::{ComponentRecipeBook, RecipeBook, RepairRecipeBook},
+    recipe::{ComponentRecipeBook, RecipeBookManifest, RepairRecipeBook},
     resources::{GameMode, PlayerEntity, Time, TimeOfDay},
     shared_server_config::ServerConstants,
     spiral::Spiral2d,
@@ -78,7 +78,7 @@ use image::DynamicImage;
 use network::{ConnectAddr, Network, Participant, Pid, Stream};
 use num::traits::FloatConst;
 use rayon::prelude::*;
-use rustls::client::ServerCertVerified;
+use rustls::client::danger::ServerCertVerified;
 use specs::Component;
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -86,7 +86,7 @@ use std::{
     mem,
     path::PathBuf,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
 use tracing::{debug, error, trace, warn};
@@ -99,7 +99,7 @@ const PING_ROLLING_AVERAGE_SECS: usize = 10;
 #[derive(Debug)]
 pub enum Event {
     Chat(comp::ChatMsg),
-    GroupInventoryUpdate(comp::Item, Uid),
+    GroupInventoryUpdate(comp::FrontendItem, Uid),
     InviteComplete {
         target: Uid,
         answer: InviteAnswer,
@@ -278,7 +278,6 @@ pub struct Client {
     possible_starting_sites: Vec<SiteId>,
     pois: Vec<PoiInfo>,
     pub chat_mode: ChatMode,
-    recipe_book: RecipeBook,
     component_recipe_book: ComponentRecipeBook,
     repair_recipe_book: RepairRecipeBook,
     available_recipes: HashMap<String, Option<SpriteKind>>,
@@ -352,34 +351,74 @@ async fn connect_quic(
     validate_tls: bool,
 ) -> Result<network::Participant, crate::error::Error> {
     let config = if validate_tls {
-        quinn::ClientConfig::with_native_roots()
+        quinn::ClientConfig::with_platform_verifier()
     } else {
         warn!(
             "skipping validation of server identity. There is no guarantee that the server you're \
              connected to is the one you expect to be connecting to."
         );
+        #[derive(Debug)]
         struct Verifier;
-        impl rustls::client::ServerCertVerifier for Verifier {
+        impl rustls::client::danger::ServerCertVerifier for Verifier {
             fn verify_server_cert(
                 &self,
-                _: &rustls::Certificate,
-                _: &[rustls::Certificate],
-                _: &rustls::ServerName,
-                _: &mut dyn Iterator<Item = &[u8]>,
-                _: &[u8],
-                _: SystemTime,
+                _end_entity: &rustls::pki_types::CertificateDer<'_>,
+                _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+                _server_name: &rustls::pki_types::ServerName<'_>,
+                _ocsp_response: &[u8],
+                _now: rustls::pki_types::UnixTime,
             ) -> Result<ServerCertVerified, rustls::Error> {
                 Ok(ServerCertVerified::assertion())
+            }
+
+            fn verify_tls12_signature(
+                &self,
+                _message: &[u8],
+                _cert: &rustls::pki_types::CertificateDer<'_>,
+                _dss: &rustls::DigitallySignedStruct,
+            ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error>
+            {
+                Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+            }
+
+            fn verify_tls13_signature(
+                &self,
+                _message: &[u8],
+                _cert: &rustls::pki_types::CertificateDer<'_>,
+                _dss: &rustls::DigitallySignedStruct,
+            ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error>
+            {
+                Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+            }
+
+            fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+                vec![
+                    rustls::SignatureScheme::RSA_PKCS1_SHA1,
+                    rustls::SignatureScheme::ECDSA_SHA1_Legacy,
+                    rustls::SignatureScheme::RSA_PKCS1_SHA256,
+                    rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+                    rustls::SignatureScheme::RSA_PKCS1_SHA384,
+                    rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+                    rustls::SignatureScheme::RSA_PKCS1_SHA512,
+                    rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
+                    rustls::SignatureScheme::RSA_PSS_SHA256,
+                    rustls::SignatureScheme::RSA_PSS_SHA384,
+                    rustls::SignatureScheme::RSA_PSS_SHA512,
+                    rustls::SignatureScheme::ED25519,
+                    rustls::SignatureScheme::ED448,
+                ]
             }
         }
 
         let mut cfg = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+            .dangerous()
             .with_custom_certificate_verifier(Arc::new(Verifier))
             .with_no_client_auth();
         cfg.enable_early_data = true;
 
-        quinn::ClientConfig::new(Arc::new(cfg))
+        quinn::ClientConfig::new(Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(cfg).unwrap(),
+        ))
     };
 
     addr::try_connect(network, &hostname, override_port, prefer_ipv6, |a| {
@@ -652,6 +691,7 @@ impl Client {
             *state.ecs_mut().write_resource() = PlayerEntity(Some(entity));
             state.ecs_mut().insert(material_stats);
             state.ecs_mut().insert(ability_map);
+            state.ecs_mut().insert(recipe_book);
 
             let map_size = map_size_lg.chunks();
             let max_height = world_map.max_height;
@@ -913,7 +953,6 @@ impl Client {
                 world_map.sites,
                 world_map.possible_starting_sites,
                 world_map.pois,
-                recipe_book,
                 component_recipe_book,
                 repair_recipe_book,
                 max_group_size,
@@ -932,7 +971,6 @@ impl Client {
             sites,
             possible_starting_sites,
             pois,
-            recipe_book,
             component_recipe_book,
             repair_recipe_book,
             max_group_size,
@@ -979,7 +1017,6 @@ impl Client {
                 .collect(),
             possible_starting_sites,
             pois,
-            recipe_book,
             component_recipe_book,
             repair_recipe_book,
             available_recipes: HashMap::default(),
@@ -1419,6 +1456,16 @@ impl Client {
         }
     }
 
+    pub fn do_pet(&mut self, target_entity: EcsEntity) {
+        if self.is_dead() {
+            return;
+        }
+
+        if let Some(target_uid) = self.state.read_component_copied(target_entity) {
+            self.control_action(ControlAction::Pet { target_uid });
+        }
+    }
+
     pub fn npc_interact(&mut self, npc_entity: EcsEntity, subject: Subject) {
         // If we're dead, exit before sending message
         if self.is_dead() {
@@ -1442,8 +1489,6 @@ impl Client {
 
     pub fn world_data(&self) -> &WorldData { &self.world_data }
 
-    pub fn recipe_book(&self) -> &RecipeBook { &self.recipe_book }
-
     pub fn component_recipe_book(&self) -> &ComponentRecipeBook { &self.component_recipe_book }
 
     pub fn repair_recipe_book(&self) -> &RepairRecipeBook { &self.repair_recipe_book }
@@ -1458,21 +1503,6 @@ impl Client {
     /// entity does not have a position.
     pub fn set_lod_pos_fallback(&mut self, pos: Vec2<f32>) { self.lod_pos_fallback = Some(pos); }
 
-    /// Returns whether the specified recipe can be crafted and the sprite, if
-    /// any, that is required to do so.
-    pub fn can_craft_recipe(&self, recipe: &str, amount: u32) -> (bool, Option<SpriteKind>) {
-        self.recipe_book
-            .get(recipe)
-            .zip(self.inventories().get(self.entity()))
-            .map(|(recipe, inv)| {
-                (
-                    recipe.inventory_contains_ingredients(inv, amount).is_ok(),
-                    recipe.craft_sprite,
-                )
-            })
-            .unwrap_or((false, None))
-    }
-
     pub fn craft_recipe(
         &mut self,
         recipe: &str,
@@ -1480,8 +1510,20 @@ impl Client {
         craft_sprite: Option<(VolumePos, SpriteKind)>,
         amount: u32,
     ) -> bool {
-        let (can_craft, required_sprite) = self.can_craft_recipe(recipe, amount);
-        let has_sprite = required_sprite.map_or(true, |s| Some(s) == craft_sprite.map(|(_, s)| s));
+        let (can_craft, has_sprite) = if let Some(inventory) = self
+            .state
+            .ecs()
+            .read_storage::<comp::Inventory>()
+            .get(self.entity())
+        {
+            let rbm = self.state.ecs().read_resource::<RecipeBookManifest>();
+            let (can_craft, required_sprite) = inventory.can_craft_recipe(recipe, 1, &rbm);
+            let has_sprite =
+                required_sprite.map_or(true, |s| Some(s) == craft_sprite.map(|(_, s)| s));
+            (can_craft, has_sprite)
+        } else {
+            (false, false)
+        };
         if can_craft && has_sprite {
             self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
                 InventoryEvent::CraftRecipe {
@@ -1630,19 +1672,22 @@ impl Client {
     }
 
     fn update_available_recipes(&mut self) {
-        self.available_recipes = self
-            .recipe_book
-            .iter()
-            .map(|(name, _)| name.clone())
-            .filter_map(|name| {
-                let (can_craft, required_sprite) = self.can_craft_recipe(&name, 1);
-                if can_craft {
-                    Some((name, required_sprite))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let rbm = self.state.ecs().read_resource::<RecipeBookManifest>();
+        let inventories = self.state.ecs().read_storage::<comp::Inventory>();
+        if let Some(inventory) = inventories.get(self.entity()) {
+            self.available_recipes = inventory
+                .recipes_iter()
+                .cloned()
+                .filter_map(|name| {
+                    let (can_craft, required_sprite) = inventory.can_craft_recipe(&name, 1, &rbm);
+                    if can_craft {
+                        Some((name, required_sprite))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+        }
     }
 
     /// Unstable, likely to be removed in a future release
@@ -1977,9 +2022,9 @@ impl Client {
         self.state.terrain().get_key_arc(chunk_pos).cloned()
     }
 
-    pub fn current<C: Component>(&self) -> Option<C>
+    pub fn current<C>(&self) -> Option<C>
     where
-        C: Clone,
+        C: Component + Clone,
     {
         self.state.read_storage::<C>().get(self.entity()).cloned()
     }
@@ -2794,6 +2839,9 @@ impl Client {
             ServerGeneral::SpectatePosition(pos) => {
                 frontend_events.push(Event::SpectatePosition(pos));
             },
+            ServerGeneral::UpdateRecipes => {
+                self.update_available_recipes();
+            },
             _ => unreachable!("Not a in_game message"),
         }
         Ok(())
@@ -3238,8 +3286,8 @@ impl Client {
         self.missing_plugins.len()
     }
 
-    /// number of requested plugins
-    pub fn num_missing_plugins(&self) -> usize { self.missing_plugins.len() }
+    /// true if missing_plugins is not empty
+    pub fn are_plugins_missing(&self) -> bool { !self.missing_plugins.is_empty() }
 
     /// extract list of locally cached plugins to load
     pub fn take_local_plugins(&mut self) -> Vec<PathBuf> { std::mem::take(&mut self.local_plugins) }
@@ -3283,6 +3331,7 @@ mod tests {
     /// CHANGING IT WILL BREAK 3rd PARTY APPLICATIONS (please extend) which
     /// needs to be informed (or fixed)
     ///  - torvus: https://gitlab.com/veloren/torvus
+    ///
     /// CONTACT @Core Developer BEFORE MERGING CHANGES TO THIS TEST
     fn constant_api_test() {
         use common::clock::Clock;

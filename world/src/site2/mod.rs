@@ -113,7 +113,9 @@ impl Site {
                 PlotKind::TerracottaPalace(tp) => Some(tp.spawn_rules(wpos)),
                 PlotKind::TerracottaHouse(th) => Some(th.spawn_rules(wpos)),
                 PlotKind::TerracottaYard(ty) => Some(ty.spawn_rules(wpos)),
-                //PlotKind::DwarvenMine(m) => Some(m.spawn_rules(wpos)),
+                PlotKind::Cultist(cl) => Some(cl.spawn_rules(wpos)),
+                PlotKind::Sahagin(sg) => Some(sg.spawn_rules(wpos)),
+                PlotKind::DwarvenMine(dm) => Some(dm.spawn_rules(wpos)),
                 _ => None,
             })
             .fold(base_spawn_rules, |a, b| a.combine(b))
@@ -423,7 +425,7 @@ impl Site {
         site
     }
 
-    /*pub fn generate_mine(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
+    pub fn generate_mine(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
         let mut rng = reseed(rng);
         let mut site = Site {
             origin,
@@ -456,7 +458,7 @@ impl Site {
         });
 
         site
-    }  */
+    }
 
     pub fn generate_citadel(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
         let mut rng = reseed(rng);
@@ -1726,6 +1728,91 @@ impl Site {
         site
     }
 
+    pub fn generate_cultist(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
+        let mut rng = reseed(rng);
+        let mut site = Site {
+            origin,
+            name: {
+                let name = NameGen::location(&mut rng).generate();
+                match rng.gen_range(0..5) {
+                    0 => format!("{} Dungeon", name),
+                    1 => format!("{} Lair", name),
+                    2 => format!("{} Crib", name),
+                    3 => format!("{} Catacombs", name),
+                    _ => format!("{} Pit", name),
+                }
+            },
+            ..Site::default()
+        };
+        let size = 22.0 as i32;
+        let aabr = Aabr {
+            min: Vec2::broadcast(-size),
+            max: Vec2::broadcast(size),
+        };
+        {
+            let cultist = plot::Cultist::generate(land, &mut reseed(&mut rng), &site, aabr);
+            let cultist_alt = cultist.alt;
+            let plot = site.create_plot(Plot {
+                kind: PlotKind::Cultist(cultist),
+                root_tile: aabr.center(),
+                tiles: aabr_tiles(aabr).collect(),
+                seed: rng.gen(),
+            });
+
+            site.blit_aabr(aabr, Tile {
+                kind: TileKind::Building,
+                plot: Some(plot),
+                hard_alt: Some(cultist_alt),
+            });
+        }
+        site
+    }
+
+    pub fn generate_sahagin(
+        land: &Land,
+        index: IndexRef,
+        rng: &mut impl Rng,
+        origin: Vec2<i32>,
+    ) -> Self {
+        let mut rng = reseed(rng);
+        let mut site = Site {
+            origin,
+            name: {
+                let name = NameGen::location(&mut rng).generate();
+                match rng.gen_range(0..4) {
+                    0 => format!("{} Isle", name),
+                    1 => format!("{} Islet", name),
+                    2 => format!("{} Key", name),
+                    3 => format!("{} Cay", name),
+                    _ => format!("{} Rock", name),
+                }
+            },
+            ..Site::default()
+        };
+        let size = 16.0 as i32;
+        let aabr = Aabr {
+            min: Vec2::broadcast(-size),
+            max: Vec2::broadcast(size),
+        };
+        {
+            let sahagin = plot::Sahagin::generate(land, index, &mut reseed(&mut rng), &site, aabr);
+            let sahagin_alt = sahagin.alt;
+            let plot = site.create_plot(Plot {
+                kind: PlotKind::Sahagin(sahagin),
+                root_tile: aabr.center(),
+                tiles: aabr_tiles(aabr).collect(),
+                seed: rng.gen(),
+            });
+
+            site.blit_aabr(aabr, Tile {
+                kind: TileKind::Building,
+                plot: Some(plot),
+                hard_alt: Some(sahagin_alt),
+            });
+        }
+        site
+    }
+
     pub fn generate_bridge(
         land: &Land,
         index: IndexRef,
@@ -2068,13 +2155,13 @@ impl Site {
                 PlotKind::Haniwa(haniwa) => haniwa.render_collect(self, canvas),
                 PlotKind::GiantTree(giant_tree) => giant_tree.render_collect(self, canvas),
                 PlotKind::CliffTower(cliff_tower) => cliff_tower.render_collect(self, canvas),
+                PlotKind::Sahagin(sahagin) => sahagin.render_collect(self, canvas),
                 PlotKind::SavannahPit(savannah_pit) => savannah_pit.render_collect(self, canvas),
                 PlotKind::SavannahHut(savannah_hut) => savannah_hut.render_collect(self, canvas),
                 PlotKind::SavannahWorkshop(savannah_workshop) => {
                     savannah_workshop.render_collect(self, canvas)
                 },
-                //PlotKind::DwarvenMine(_dwarven_mine) => dwarven_mine.render_collect(self,
-                // canvas),
+                PlotKind::DwarvenMine(dwarven_mine) => dwarven_mine.render_collect(self, canvas),
                 PlotKind::TerracottaPalace(terracotta_palace) => {
                     terracotta_palace.render_collect(self, canvas)
                 },
@@ -2084,6 +2171,7 @@ impl Site {
                 PlotKind::TerracottaYard(terracotta_yard) => {
                     terracotta_yard.render_collect(self, canvas)
                 },
+                PlotKind::Cultist(cultist) => cultist.render_collect(self, canvas),
                 PlotKind::DesertCityMultiPlot(desert_city_multi_plot) => {
                     desert_city_multi_plot.render_collect(self, canvas)
                 },

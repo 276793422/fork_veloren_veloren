@@ -274,6 +274,10 @@ pub struct Psyche {
     /// wandering behavior in the idle state, and scaling `aggro_dist` in
     /// certain situations.
     pub aggro_range_multiplier: f32,
+    /// Whether this entity should *intelligently* decide to loose aggro based
+    /// on distance from agent home and health, this is not suitable for world
+    /// bosses and roaming entities
+    pub should_stop_pursuing: bool,
 }
 
 impl<'a> From<&'a Body> for Psyche {
@@ -363,18 +367,21 @@ impl<'a> From<&'a Body> for Psyche {
                 },
                 Body::BipedSmall(biped_small) => match biped_small.species {
                     biped_small::Species::Gnarling => 0.2,
+                    biped_small::Species::Mandragora => 0.1,
                     biped_small::Species::Adlet => 0.2,
                     biped_small::Species::Haniwa => 0.1,
                     biped_small::Species::Sahagin => 0.1,
                     biped_small::Species::Myrmidon => 0.0,
+                    biped_small::Species::TreasureEgg => 9.9,
                     biped_small::Species::Husk
                     | biped_small::Species::Boreal
-                    | biped_small::Species::Clockwork
+                    | biped_small::Species::IronDwarf
                     | biped_small::Species::Flamekeeper
                     | biped_small::Species::Irrwurz
                     | biped_small::Species::ShamanicSpirit
                     | biped_small::Species::Jiangshi
-                    | biped_small::Species::Bushly => 0.0,
+                    | biped_small::Species::Bushly
+                    | biped_small::Species::GnarlingChieftain => 0.0,
 
                     _ => 0.5,
                 },
@@ -424,6 +431,13 @@ impl<'a> From<&'a Body> for Psyche {
             },
             idle_wander_factor: 1.0,
             aggro_range_multiplier: 1.0,
+            should_stop_pursuing: match body {
+                Body::BirdLarge(_) => false,
+                Body::BipedLarge(biped_large) => {
+                    !matches!(biped_large.species, biped_large::Species::Gigasfrost)
+                },
+                _ => true,
+            },
         }
     }
 }

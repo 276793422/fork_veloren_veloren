@@ -2,7 +2,7 @@ use core::ops::Not;
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use specs::{Component, DerefFlaggedStorage};
-use std::{cmp::Ordering, convert::TryFrom, mem, ops::Range};
+use std::{cmp::Ordering, convert::TryFrom, mem, num::NonZeroU32, ops::Range};
 use tracing::{debug, trace, warn};
 use vek::Vec3;
 
@@ -15,20 +15,26 @@ use crate::{
                 MaterialStatManifest, TagExampleInfo,
             },
             loadout::Loadout,
+            recipe_book::RecipeBook,
             slot::{EquipSlot, Slot, SlotError},
         },
         loot_owner::LootOwnerKind,
         slot::{InvSlotId, SlotId},
         Item,
     },
+    recipe::{Recipe, RecipeBookManifest},
     resources::Time,
+    terrain::SpriteKind,
     uid::Uid,
     LoadoutBuilder,
 };
 
+use super::FrontendItem;
+
 pub mod item;
 pub mod loadout;
 pub mod loadout_builder;
+pub mod recipe_book;
 pub mod slot;
 #[cfg(test)] mod test;
 #[cfg(test)] mod test_helpers;
@@ -50,6 +56,8 @@ pub struct Inventory {
     /// These slots are "remove-only" meaning that during normal gameplay items
     /// can only be removed from these slots and never entered.
     overflow_items: Vec<Item>,
+    /// Recipes that are available for use
+    recipe_book: RecipeBook,
 }
 
 /// Errors which the methods on `Inventory` produce
@@ -129,6 +137,7 @@ impl Inventory {
             loadout,
             slots: vec![None; DEFAULT_INVENTORY_SLOTS],
             overflow_items: Vec::new(),
+            recipe_book: RecipeBook::default(),
         }
     }
 
@@ -138,10 +147,16 @@ impl Inventory {
             loadout,
             slots: vec![None; 1],
             overflow_items: Vec::new(),
+            recipe_book: RecipeBook::default(),
         }
     }
 
-    /// Total number of slots in the inventory.
+    pub fn with_recipe_book(mut self, recipe_book: RecipeBook) -> Inventory {
+        self.recipe_book = recipe_book;
+        self
+    }
+
+    /// Total number of slots in in the inventory.
     pub fn capacity(&self) -> usize { self.slots().count() }
 
     /// An iterator of all inventory slots
@@ -255,61 +270,64 @@ impl Inventory {
     /// called
     pub fn next_sort_order(&self) -> InventorySortOrder { self.next_sort_order }
 
-    /// Adds a new item to the first fitting group of the inventory or starts a
-    /// new group. Returns the item in an error if no space was found, otherwise
-    /// returns the found slot.
-    pub fn push(&mut self, item: Item) -> Result<(), Item> {
-        // First, check to make sure there's enough room for all instances of the
-        // item (note that if we find any empty slots, we can guarantee this by
-        // just filling up the whole slot, but to be nice we won't use it if we
-        // can find enough space in any combination of existing slots, and
-        // that's what we check in the `is_stackable` case).
+    /// Adds a new item to the fitting slots of the inventory or starts a
+    /// new group. Returns the item in an error if no space was found.
+    ///
+    /// WARNING: This **may** make inventory modifications if `Err(item)` is
+    /// returned. The second tuple field in the error is the number of items
+    /// that were successfully inserted into the inventory.
+    pub fn push(&mut self, mut item: Item) -> Result<(), (Item, Option<NonZeroU32>)> {
+        // If the item is stackable, we can increase the amount of other equal items up
+        // to max_amount before inserting a new item if there is still a remaining
+        // amount (caused by overflow or no other equal stackable being present in the
+        // inventory).
+        if item.is_stackable() {
+            let total_amount = item.amount();
 
-        if item.is_stackable()
-            && self
-                .slots()
-                .filter_map(Option::as_ref)
+            let remaining = self
+                .slots_mut()
+                .filter_map(Option::as_mut)
                 .filter(|s| *s == &item)
-                .try_fold(item.amount(), |remaining, current| {
-                    remaining
+                .try_fold(total_amount, |remaining, current| {
+                    debug_assert_eq!(
+                        item.max_amount(),
+                        current.max_amount(),
+                        "max_amount of two equal items must match"
+                    );
+
+                    // NOTE: Invariant that current.amount <= current.max_amount(), so this
+                    // subtraction is safe.
+                    let new_remaining = remaining
                         .checked_sub(current.max_amount() - current.amount())
-                        .filter(|&remaining| remaining > 0)
-                })
-                .is_none()
-        {
-            // We either exactly matched or had more than enough space for inserting the
-            // item into existing slots, so go do that!
-            assert!(
-                self.slots_mut()
-                    .filter_map(Option::as_mut)
-                    .filter(|s| *s == &item)
-                    .try_fold(item.amount(), |remaining, current| {
-                        // NOTE: Invariant that current.amount <= current.max_amount(), so the
-                        // subtraction is safe.
-                        let new_remaining = remaining
-                            .checked_sub(current.max_amount() - current.amount())
-                            .filter(|&remaining| remaining > 0);
-                        if new_remaining.is_some() {
-                            // Not enough capacity left to hold all the remaining items, so we fill
-                            // it as much as we can.
-                            current
-                                .set_amount(current.max_amount())
-                                .expect("max_amount() is always a valid amount.");
-                        } else {
-                            // Enough capacity to hold all the remaining items.
-                            current
-                                .increase_amount(remaining)
-                                .expect("Already checked that there is enough room.");
-                        }
-                        new_remaining
-                    })
-                    .is_none()
-            );
-            Ok(())
+                        .filter(|&remaining| remaining > 0);
+                    if new_remaining.is_some() {
+                        // Not enough capacity left to hold all the remaining items, so we set this
+                        // one to max.
+                        current
+                            .set_amount(current.max_amount())
+                            .expect("max_amount() is always a valid amount");
+                    } else {
+                        // Enough capacity to hold all the remaining items.
+                        current.increase_amount(remaining).expect(
+                            "This item must be able to contain the remaining amount, because \
+                             remaining < current.max_amount() - current.amount()",
+                        );
+                    }
+
+                    new_remaining
+                });
+
+            if let Some(remaining) = remaining {
+                item.set_amount(remaining)
+                    .expect("Remaining is known to be > 0");
+                self.insert(item)
+                    .map_err(|item| (item, NonZeroU32::new(total_amount - remaining)))
+            } else {
+                Ok(())
+            }
         } else {
-            // No existing item to stack with or item not stackable, put the item in a new
-            // slot
-            self.insert(item)
+            // The item isn't stackable, insert it directly
+            self.insert(item).map_err(|item| (item, None))
         }
     }
 
@@ -319,7 +337,7 @@ impl Inventory {
         // Vec doesn't allocate for zero elements so this should be cheap
         let mut leftovers = Vec::new();
         for item in items {
-            if let Err(item) = self.push(item) {
+            if let Err((item, _)) = self.push(item) {
                 leftovers.push(item);
             }
         }
@@ -343,7 +361,7 @@ impl Inventory {
         let mut leftovers = Vec::new();
         for item in &mut items {
             if self.contains(&item).not() {
-                if let Err(overflow) = self.push(item) {
+                if let Err((overflow, _)) = self.push(item) {
                     leftovers.push(overflow);
                 }
             } // else drop item if it was already in
@@ -595,6 +613,39 @@ impl Inventory {
         }
     }
 
+    /// Takes an amount of items from a slot. If the amount to take is larger
+    /// than the item amount, the item amount will be returned instead.
+    pub fn take_amount(
+        &mut self,
+        inv_slot_id: InvSlotId,
+        amount: NonZeroU32,
+        ability_map: &AbilityMap,
+        msm: &MaterialStatManifest,
+    ) -> Option<Item> {
+        if let Some(Some(item)) = self.slot_mut(inv_slot_id) {
+            if item.is_stackable() && item.amount() > amount.get() {
+                let mut return_item = item.duplicate(ability_map, msm);
+                let return_amount = amount.get();
+                // Will never overflow since we know item.amount() > amount.get()
+                let new_amount = item.amount() - return_amount;
+
+                return_item
+                    .set_amount(return_amount)
+                    .expect("We know that 0 < return_amount < item.amount()");
+                item.set_amount(new_amount)
+                    .expect("new_amount must be > 0 since return item is < item.amount");
+
+                Some(return_item)
+            } else {
+                // If return_amount == item.amount or the item's amount is one, we
+                // can just pop it from the inventory
+                self.remove(inv_slot_id)
+            }
+        } else {
+            None
+        }
+    }
+
     /// Takes half of the items from a slot in the inventory
     #[must_use = "Returned items will be lost if not used"]
     pub fn take_half(
@@ -748,13 +799,16 @@ impl Inventory {
     /// picked up and pushing them to the inventory to ensure that items
     /// containing items aren't inserted into the inventory as this is not
     /// currently supported.
-    pub fn pickup_item(&mut self, mut item: Item) -> Result<(), Item> {
+    ///
+    /// WARNING: The `Err(_)` variant may still cause inventory modifications,
+    /// note on [`Inventory::push`]
+    pub fn pickup_item(&mut self, mut item: Item) -> Result<(), (Item, Option<NonZeroU32>)> {
         if item.is_stackable() {
             return self.push(item);
         }
 
         if self.free_slots() < item.populated_slots() + 1 {
-            return Err(item);
+            return Err((item, None));
         }
 
         // Unload any items contained within the item, and push those items and the item
@@ -1044,6 +1098,61 @@ impl Inventory {
     pub fn persistence_push_overflow_items<I: Iterator<Item = Item>>(&mut self, overflow_items: I) {
         self.overflow_items.extend(overflow_items);
     }
+
+    pub fn recipes_iter(&self) -> impl ExactSizeIterator<Item = &String> { self.recipe_book.iter() }
+
+    pub fn recipe_groups_iter(&self) -> impl ExactSizeIterator<Item = &Item> {
+        self.recipe_book.iter_groups()
+    }
+
+    pub fn available_recipes_iter<'a>(
+        &'a self,
+        rbm: &'a RecipeBookManifest,
+    ) -> impl Iterator<Item = (&String, &Recipe)> + '_ {
+        self.recipe_book.get_available_iter(rbm)
+    }
+
+    pub fn recipe_book_len(&self) -> usize { self.recipe_book.len() }
+
+    pub fn get_recipe<'a>(
+        &'a self,
+        recipe_key: &str,
+        rbm: &'a RecipeBookManifest,
+    ) -> Option<&Recipe> {
+        self.recipe_book.get(recipe_key, rbm)
+    }
+
+    pub fn push_recipe_group(&mut self, recipe_group: Item) -> Result<(), Item> {
+        self.recipe_book.push_group(recipe_group)
+    }
+
+    /// Returns whether the specified recipe can be crafted and the sprite, if
+    /// any, that is required to do so.
+    pub fn can_craft_recipe(
+        &self,
+        recipe_key: &str,
+        amount: u32,
+        rbm: &RecipeBookManifest,
+    ) -> (bool, Option<SpriteKind>) {
+        if let Some(recipe) = self.recipe_book.get(recipe_key, rbm) {
+            (
+                recipe.inventory_contains_ingredients(self, amount).is_ok(),
+                recipe.craft_sprite,
+            )
+        } else {
+            (false, None)
+        }
+    }
+
+    pub fn recipe_is_known(&self, recipe_key: &str) -> bool {
+        self.recipe_book.is_known(recipe_key)
+    }
+
+    pub fn reset_recipes(&mut self) { self.recipe_book.reset(); }
+
+    pub fn persistence_recipes_iter_with_index(&self) -> impl Iterator<Item = (usize, &Item)> {
+        self.recipe_book.persistence_recipes_iter_with_index()
+    }
 }
 
 impl Component for Inventory {
@@ -1068,7 +1177,7 @@ pub enum InventoryUpdateEvent {
     Given,
     Swapped,
     Dropped,
-    Collected(Item),
+    Collected(FrontendItem),
     BlockCollectFailed {
         pos: Vec3<i32>,
         reason: CollectFailedReason,

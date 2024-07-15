@@ -7,6 +7,7 @@ mod citadel;
 mod cliff_tower;
 mod coastal_house;
 mod coastal_workshop;
+mod cultist;
 mod desert_city_arena;
 mod desert_city_multiplot;
 mod desert_city_temple;
@@ -19,6 +20,7 @@ mod house;
 mod jungle_ruin;
 mod pirate_hideout;
 mod rock_circle;
+mod sahagin;
 mod savannah_hut;
 mod savannah_pit;
 mod savannah_workshop;
@@ -33,14 +35,15 @@ mod workshop;
 pub use self::{
     adlet::AdletStronghold, airship_dock::AirshipDock, bridge::Bridge, camp::Camp, castle::Castle,
     citadel::Citadel, cliff_tower::CliffTower, coastal_house::CoastalHouse,
-    coastal_workshop::CoastalWorkshop, desert_city_arena::DesertCityArena,
+    coastal_workshop::CoastalWorkshop, cultist::Cultist, desert_city_arena::DesertCityArena,
     desert_city_multiplot::DesertCityMultiPlot, desert_city_temple::DesertCityTemple,
     dungeon::Dungeon, dwarven_mine::DwarvenMine, giant_tree::GiantTree,
     gnarling::GnarlingFortification, haniwa::Haniwa, house::House, jungle_ruin::JungleRuin,
-    pirate_hideout::PirateHideout, rock_circle::RockCircle, savannah_hut::SavannahHut,
-    savannah_pit::SavannahPit, savannah_workshop::SavannahWorkshop, sea_chapel::SeaChapel,
-    tavern::Tavern, terracotta_house::TerracottaHouse, terracotta_palace::TerracottaPalace,
-    terracotta_yard::TerracottaYard, troll_cave::TrollCave, workshop::Workshop,
+    pirate_hideout::PirateHideout, rock_circle::RockCircle, sahagin::Sahagin,
+    savannah_hut::SavannahHut, savannah_pit::SavannahPit, savannah_workshop::SavannahWorkshop,
+    sea_chapel::SeaChapel, tavern::Tavern, terracotta_house::TerracottaHouse,
+    terracotta_palace::TerracottaPalace, terracotta_yard::TerracottaYard, troll_cave::TrollCave,
+    workshop::Workshop,
 };
 
 use super::*;
@@ -94,6 +97,7 @@ pub enum PlotKind {
     JungleRuin(JungleRuin),
     Plaza,
     Castle(Castle),
+    Cultist(Cultist),
     Road(Path<Vec2<i32>>),
     Dungeon(Dungeon),
     Gnarling(GnarlingFortification),
@@ -101,6 +105,7 @@ pub enum PlotKind {
     Haniwa(Haniwa),
     GiantTree(GiantTree),
     CliffTower(CliffTower),
+    Sahagin(Sahagin),
     Citadel(Citadel),
     SavannahPit(SavannahPit),
     SavannahHut(SavannahHut),
@@ -110,7 +115,7 @@ pub enum PlotKind {
     RockCircle(RockCircle),
     TrollCave(TrollCave),
     Camp(Camp),
-    //DwarvenMine(DwarvenMine),
+    DwarvenMine(DwarvenMine),
     TerracottaPalace(TerracottaPalace),
     TerracottaHouse(TerracottaHouse),
     TerracottaYard(TerracottaYard),

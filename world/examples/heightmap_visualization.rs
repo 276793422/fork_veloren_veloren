@@ -6,7 +6,7 @@ use rayon::ThreadPoolBuilder;
 use std::{fs::File, io::Write};
 use vek::*;
 use veloren_world::{
-    sim::{FileOpts, WorldOpts, DEFAULT_WORLD_MAP},
+    sim::{FileOpts, WorldOpts, DEFAULT_WORLD_MAP, DEFAULT_WORLD_SEED},
     Land, World,
 };
 
@@ -87,7 +87,7 @@ fn image_from_function<F: FnMut(u32, u32) -> [u8; 3]>(
         heightmap.as_raw(),
         heightmap.width(),
         heightmap.height(),
-        image::ColorType::Rgb8,
+        image::ExtendedColorType::Rgb8,
     )
     .unwrap();
     let mut f = File::create(name).unwrap();
@@ -120,7 +120,7 @@ fn main() {
     let pool = ThreadPoolBuilder::new().build().unwrap();
     println!("Loading world");
     let (world, _index) = World::generate(
-        59686,
+        DEFAULT_WORLD_SEED,
         WorldOpts {
             seed_elements: true,
             world_file: FileOpts::LoadAsset(DEFAULT_WORLD_MAP.into()),

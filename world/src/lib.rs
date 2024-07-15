@@ -8,6 +8,7 @@
 #![allow(clippy::branches_sharing_code)] // TODO: evaluate
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(option_zip, let_chains)]
+#![cfg_attr(feature = "simd", feature(portable_simd))]
 
 mod all;
 mod block;
@@ -36,7 +37,7 @@ pub use block::BlockGen;
 use civ::WorldCivStage;
 pub use column::ColumnSample;
 pub use common::terrain::site::{DungeonKindMeta, SettlementKindMeta};
-use common::terrain::CoordinateConversions;
+use common::{spiral::Spiral2d, terrain::CoordinateConversions};
 pub use index::{IndexOwned, IndexRef};
 use sim::WorldSimStage;
 
@@ -211,11 +212,13 @@ impl World {
                                 civ::SiteKind::Tree | civ::SiteKind::GiantTree => world_msg::SiteKind::Tree,
                                 // TODO: Maybe change?
                                 civ::SiteKind::Gnarling => world_msg::SiteKind::Gnarling,
-                                //civ::SiteKind::DwarvenMine => world_msg::SiteKind::DwarvenMine,
+                                civ::SiteKind::DwarvenMine => world_msg::SiteKind::DwarvenMine,
                                 civ::SiteKind::ChapelSite => world_msg::SiteKind::ChapelSite,
                                 civ::SiteKind::Terracotta => world_msg::SiteKind::Terracotta,
                                 civ::SiteKind::Citadel => world_msg::SiteKind::Castle,
                                 civ::SiteKind::Bridge(_, _) => world_msg::SiteKind::Bridge,
+                                civ::SiteKind::Cultist => world_msg::SiteKind::Cultist,
+                                civ::SiteKind::Sahagin => world_msg::SiteKind::Sahagin,
                                 civ::SiteKind::Adlet => world_msg::SiteKind::Adlet,
                                 civ::SiteKind::Haniwa => world_msg::SiteKind::Haniwa,
                             },
@@ -249,7 +252,7 @@ impl World {
                         }))
                     .collect(),
                 possible_starting_sites: {
-                    const STARTING_SITE_COUNT: usize = 4;
+                    const STARTING_SITE_COUNT: usize = 5;
 
                     let mut candidates = self
                         .civs()
@@ -258,21 +261,55 @@ impl World {
                         .filter_map(|(_, civ_site)| Some((civ_site, civ_site.site_tmp?)))
                         .map(|(civ_site, site_id)| {
                             // Score the site according to how suitable it is to be a starting site
-                            let mut score = 0.0;
 
-                            if let SiteKind::Refactor(site2) = &index.sites[site_id].kind {
-                                // Strongly prefer towns
-                                score += 1000.0;
-                                // Prefer sites of a medium size
-                                score += 2.0 / (1.0 + (site2.plots().len() as f32 - 20.0).abs() / 10.0);
+                            let (site2, mut score) = match &index.sites[site_id].kind {
+                                SiteKind::Refactor(site2) => (site2, 2.0),
+                                // Non-town sites should not be chosen as starting sites and get a score of 0
+                                _ => return (site_id.id(), 0.0)
                             };
-                            // Prefer sites in hospitable climates
-                            if let Some(chunk) = self.sim().get(civ_site.center) {
-                                score += 1.0 / (1.0 + chunk.temp.abs());
-                                score += 1.0 / (1.0 + (chunk.humidity - CONFIG.forest_hum).abs() * 2.0);
-                            }
+
+                            /// Optimal number of plots in a starter town
+                            const OPTIMAL_STARTER_TOWN_SIZE: f32 = 30.0;
+
+                            // Prefer sites of a medium size
+                            let plots = site2.plots().len() as f32;
+                            let size_score = if plots > OPTIMAL_STARTER_TOWN_SIZE {
+                                1.0 + (1.0 / (1.0 + ((plots - OPTIMAL_STARTER_TOWN_SIZE) / 15.0).powi(3)))
+                            } else {
+                               (2.05 / (1.0 + ((OPTIMAL_STARTER_TOWN_SIZE - plots) / 15.0).powi(5))) - 0.05
+                            }.max(0.01);
+
+                            score *= size_score;
+
                             // Prefer sites that are close to the centre of the world
-                            score += 4.0 / (1.0 + civ_site.center.map2(self.sim().get_size(), |e, sz| (e as f32 / sz as f32 - 0.5).abs() * 2.0).reduce_partial_max());
+                            let pos_score = (
+                                10.0 / (
+                                    1.0 + (
+                                        civ_site.center.map2(self.sim().get_size(),
+                                            |e, sz|
+                                            (e as f32 / sz as f32 - 0.5).abs() * 2.0).reduce_partial_max()
+                                    ).powi(6) * 25.0
+                                )
+                            ).max(0.02);
+                            score *= pos_score;
+
+                            // Check if neighboring biomes are beginner friendly
+                            let mut chunk_scores = 2.0;
+                            for (chunk, distance) in Spiral2d::with_radius(10)
+                                .filter_map(|rel_pos| {
+                                    let chunk_pos = civ_site.center + rel_pos * 2;
+                                    self.sim().get(chunk_pos).zip(Some(rel_pos.as_::<f32>().magnitude()))
+                                })
+                            {
+                                let weight = 1.0 / (distance * std::f32::consts::TAU + 1.0);
+                                let chunk_difficulty = 20.0 / (20.0 + chunk.get_biome().difficulty().pow(4) as f32 / 5.0);
+                                // let chunk_difficulty = 1.0 / chunk.get_biome().difficulty() as f32;
+
+                                chunk_scores *= 1.0 - weight + chunk_difficulty * weight;
+                            }
+
+                            score *= chunk_scores;
+
                             (site_id.id(), score)
                         })
                         .collect::<Vec<_>>();
@@ -696,6 +733,47 @@ impl World {
                                 site.tile_wpos(plot.root_tile),
                                 Rgb::black(),
                                 lod::ObjectKind::Arena,
+                            )),
+                            site2::plot::PlotKind::SavannahHut(_)
+                            | site2::plot::PlotKind::SavannahWorkshop(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::SavannahHut,
+                            )),
+                            site2::plot::PlotKind::SavannahPit(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::SavannahPit,
+                            )),
+                            site2::plot::PlotKind::TerracottaPalace(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::TerracottaPalace,
+                            )),
+                            site2::plot::PlotKind::TerracottaHouse(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::TerracottaHouse,
+                            )),
+                            site2::plot::PlotKind::TerracottaYard(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::TerracottaYard,
+                            )),
+                            site2::plot::PlotKind::AirshipDock(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::AirshipDock,
+                            )),
+                            site2::plot::PlotKind::CoastalHouse(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::CoastalHouse,
+                            )),
+                            site2::plot::PlotKind::CoastalWorkshop(_) => Some((
+                                site.tile_wpos(plot.root_tile),
+                                Rgb::black(),
+                                lod::ObjectKind::CoastalWorkshop,
                             )),
                             _ => None,
                         })

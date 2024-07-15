@@ -106,6 +106,38 @@ impl Lod {
                 ),
                 (lod::ObjectKind::Palm, make_lod_object("palm", renderer)),
                 (lod::ObjectKind::Arena, make_lod_object("arena", renderer)),
+                (
+                    lod::ObjectKind::SavannahHut,
+                    make_lod_object("savannah_hut", renderer),
+                ),
+                (
+                    lod::ObjectKind::SavannahPit,
+                    make_lod_object("savannah_pit", renderer),
+                ),
+                (
+                    lod::ObjectKind::TerracottaPalace,
+                    make_lod_object("terracotta_palace", renderer),
+                ),
+                (
+                    lod::ObjectKind::TerracottaHouse,
+                    make_lod_object("terracotta_house", renderer),
+                ),
+                (
+                    lod::ObjectKind::TerracottaYard,
+                    make_lod_object("terracotta_yard", renderer),
+                ),
+                (
+                    lod::ObjectKind::AirshipDock,
+                    make_lod_object("airship_dock", renderer),
+                ),
+                (
+                    lod::ObjectKind::CoastalHouse,
+                    make_lod_object("coastal_house", renderer),
+                ),
+                (
+                    lod::ObjectKind::CoastalWorkshop,
+                    make_lod_object("coastal_workshop", renderer),
+                ),
             ]
             .into(),
         }

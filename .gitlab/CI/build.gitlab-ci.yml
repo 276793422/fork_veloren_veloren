@@ -110,8 +110,8 @@ coverage:
     - source ./.gitlab/scripts/windows-x86_64.sh
     - cp -r target/x86_64-pc-windows-gnu/release/veloren-server-cli.exe $CI_PROJECT_DIR
     - cp -r target/x86_64-pc-windows-gnu/release/veloren-voxygen.exe $CI_PROJECT_DIR
-    - cp /usr/lib/gcc/x86_64-w64-mingw32/9.3-posix/libgcc_s_seh-1.dll $CI_PROJECT_DIR
-    - cp /usr/lib/gcc/x86_64-w64-mingw32/9.3-posix/libstdc++-6.dll $CI_PROJECT_DIR
+    - cp /usr/lib/gcc/x86_64-w64-mingw32/10-posix/libgcc_s_seh-1.dll $CI_PROJECT_DIR
+    - cp /usr/lib/gcc/x86_64-w64-mingw32/10-posix/libstdc++-6.dll $CI_PROJECT_DIR
     - cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll $CI_PROJECT_DIR
   artifacts:
     paths:
@@ -129,6 +129,7 @@ coverage:
 .tmacos-before-script: &tmacos-before-script
   - source $HOME/.cargo/env
   - cargo --version
+  - rustup toolchain list
   - export DISABLE_GIT_LFS_CHECK=true
   - export VELOREN_ASSETS="$(pwd)/assets"
   - echo "VELOREN_ASSETS=$VELOREN_ASSETS"
@@ -140,9 +141,9 @@ coverage:
   script:
     - export MACOSX_DEPLOYMENT_TARGET="10.13"
     - export VELOREN_USERDATA_STRATEGY=executable
-    - cargo build --release --no-default-features --features default-publish --target $RUST_TARGET
-    - cp -r target/$RUST_TARGET/release/veloren-server-cli $CI_PROJECT_DIR
-    - cp -r target/$RUST_TARGET/release/veloren-voxygen $CI_PROJECT_DIR
+    - cargo build --profile ${PROFILE} --no-default-features --features default-publish --target $RUST_TARGET
+    - cp -r target/$RUST_TARGET/${PROFILE}/veloren-server-cli $CI_PROJECT_DIR
+    - cp -r target/$RUST_TARGET/${PROFILE}/veloren-voxygen $CI_PROJECT_DIR
   artifacts:
     paths:
       - veloren-server-cli
@@ -155,16 +156,18 @@ coverage:
   extends:
     - .tmacos
   before_script:
+    # Using fat LTO on macos_x86_64 caused timeouts in the build pipeline, overriding it to thin here fixes this
+    - export PROFILE="release-thinlto"
     - *tmacos-before-script
     - export RUST_TARGET="x86_64-apple-darwin"
-    # Using fat LTO on macos_x86_64 caused timeouts in the build pipeline, overriding it to thin here fixes this
-    - export RUSTFLAGS="-C lto=thin"
 
 .tmacos-aarch64:
   extends:
     - .tmacos
   before_script:
+    - export PROFILE="release"
     - *tmacos-before-script
+    - rustup target add aarch64-apple-darwin
     - export RUST_TARGET="aarch64-apple-darwin"
 
 # build on release or master

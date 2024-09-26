@@ -21,16 +21,19 @@ use crate::{
 use i18n::Localization;
 
 use client::{self, Client};
-use common::comp::{
-    self,
-    ability::{AbilityInput, Stance},
-    item::{
-        tool::{AbilityContext, ToolKind},
-        ItemDesc, ItemI18n, MaterialStatManifest,
+use common::{
+    comp::{
+        self,
+        ability::{AbilityInput, Stance},
+        item::{
+            tool::{AbilityContext, ToolKind},
+            ItemDesc, ItemI18n, MaterialStatManifest,
+        },
+        skillset::SkillGroupKind,
+        Ability, ActiveAbilities, Body, CharacterState, Combo, Energy, Hardcore, Health, Inventory,
+        Poise, PoiseState, SkillSet, Stats,
     },
-    skillset::SkillGroupKind,
-    Ability, ActiveAbilities, Body, CharacterState, Combo, Energy, Health, Inventory, Poise,
-    PoiseState, SkillSet, Stats,
+    recipe::RecipeBookManifest,
 };
 use conrod_core::{
     color,
@@ -101,8 +104,8 @@ widget_ids! {
         exp_img_frame,
         exp_img,
         exp_lvl,
-        spellbook_txt_bg,
-        spellbook_txt,
+        diary_txt_bg,
+        diary_txt,
         sp_arrow,
         sp_arrow_txt_bg,
         sp_arrow_txt,
@@ -312,6 +315,7 @@ pub struct Skillbar<'a> {
     #[conrod(common_builder)]
     common: widget::CommonBuilder,
     msm: &'a MaterialStatManifest,
+    rbm: &'a RecipeBookManifest,
     combo_floater: Option<ComboFloater>,
     context: &'a AbilityContext,
     combo: Option<&'a Combo>,
@@ -347,6 +351,7 @@ impl<'a> Skillbar<'a> {
         localized_strings: &'a Localization,
         item_i18n: &'a ItemI18n,
         msm: &'a MaterialStatManifest,
+        rbm: &'a RecipeBookManifest,
         combo_floater: Option<ComboFloater>,
         context: &'a AbilityContext,
         combo: Option<&'a Combo>,
@@ -380,6 +385,7 @@ impl<'a> Skillbar<'a> {
             localized_strings,
             item_i18n,
             msm,
+            rbm,
             combo_floater,
             context,
             combo,
@@ -420,6 +426,7 @@ impl<'a> Skillbar<'a> {
     fn show_death_message(&self, state: &State, ui: &mut UiCell) {
         let localized_strings = self.localized_strings;
         let key_layout = &self.global_state.window.key_layout;
+        let hardcore = self.client.current::<Hardcore>().is_some();
 
         if let Some(key) = self
             .global_state
@@ -433,17 +440,30 @@ impl<'a> Skillbar<'a> {
                 .font_id(self.fonts.cyri.conrod_id)
                 .color(Color::Rgba(0.0, 0.0, 0.0, 1.0))
                 .set(state.ids.death_message_1_bg, ui);
-            let respawn_msg =
+            let respawn_msg = if hardcore {
+                localized_strings.get_msg_ctx(
+                    "hud-press_key_to_return_to_char_menu",
+                    &i18n::fluent_args! {
+                        "key" => key.display_string(key_layout)
+                    },
+                )
+            } else {
                 localized_strings.get_msg_ctx("hud-press_key_to_respawn", &i18n::fluent_args! {
                     "key" => key.display_string(key_layout)
-                });
+                })
+            };
+            let penalty_msg = if hardcore {
+                self.localized_strings.get_msg("hud-hardcore_char_deleted")
+            } else {
+                self.localized_strings.get_msg("hud_items_lost_dur")
+            };
             Text::new(&respawn_msg)
                 .mid_bottom_with_margin_on(state.ids.death_message_1_bg, -120.0)
                 .font_size(self.fonts.cyri.scale(30))
                 .font_id(self.fonts.cyri.conrod_id)
                 .color(Color::Rgba(0.0, 0.0, 0.0, 1.0))
                 .set(state.ids.death_message_2_bg, ui);
-            Text::new(&self.localized_strings.get_msg("hud_items_lost_dur"))
+            Text::new(&penalty_msg)
                 .mid_bottom_with_margin_on(state.ids.death_message_2_bg, -50.0)
                 .font_size(self.fonts.cyri.scale(30))
                 .font_id(self.fonts.cyri.conrod_id)
@@ -461,7 +481,7 @@ impl<'a> Skillbar<'a> {
                 .font_id(self.fonts.cyri.conrod_id)
                 .color(CRITICAL_HP_COLOR)
                 .set(state.ids.death_message_2, ui);
-            Text::new(&self.localized_strings.get_msg("hud_items_lost_dur"))
+            Text::new(&penalty_msg)
                 .bottom_left_with_margins_on(state.ids.death_message_3_bg, 2.0, 2.0)
                 .font_size(self.fonts.cyri.scale(30))
                 .font_id(self.fonts.cyri.conrod_id)
@@ -799,18 +819,18 @@ impl<'a> Skillbar<'a> {
             .set(state.ids.exp_img, ui);
 
             // Show Shortcut
-            if let Some(spell) = &self
+            if let Some(diary) = &self
                 .global_state
                 .settings
                 .controls
-                .get_binding(GameInput::Spellbook)
+                .get_binding(GameInput::Diary)
             {
                 self.create_new_button_with_shadow(
                     ui,
-                    spell,
+                    diary,
                     state.ids.exp_img,
-                    state.ids.spellbook_txt_bg,
-                    state.ids.spellbook_txt,
+                    state.ids.diary_txt_bg,
+                    state.ids.diary_txt,
                 );
             }
         } else {
@@ -837,18 +857,18 @@ impl<'a> Skillbar<'a> {
                 .set(state.ids.exp_img, ui);
 
             // Show Shortcut
-            if let Some(spell) = &self
+            if let Some(diary) = &self
                 .global_state
                 .settings
                 .controls
-                .get_binding(GameInput::Spellbook)
+                .get_binding(GameInput::Diary)
             {
                 self.create_new_button_with_shadow(
                     ui,
-                    spell,
+                    diary,
                     state.ids.exp_img,
-                    state.ids.spellbook_txt_bg,
-                    state.ids.spellbook_txt,
+                    state.ids.diary_txt_bg,
+                    state.ids.diary_txt,
                 );
             }
         }
@@ -1013,6 +1033,7 @@ impl<'a> Skillbar<'a> {
             self.item_imgs,
             self.pulse,
             self.msm,
+            self.rbm,
             self.localized_strings,
             self.item_i18n,
         )

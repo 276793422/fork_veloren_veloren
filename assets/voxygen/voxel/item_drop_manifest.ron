@@ -862,6 +862,7 @@
     Simple("common.items.consumable.potion_big"): "voxel.object.potion_red",
     Simple("common.items.consumable.potion_curious"): "voxel.object.potion_curious",
     Simple("common.items.consumable.potion_combustion"): "voxel.object.potion_combustion",
+    Simple("common.items.consumable.potion_freezing"): "voxel.object.potion_blue_1",
     Simple("common.items.consumable.potion_agility"): "voxel.object.potion_agility",
     Simple("common.items.charms.burning_charm"): "voxel.object.burning_charm",
     Simple("common.items.charms.frozen_charm"): "voxel.object.frozen_charm",
@@ -1010,6 +1011,8 @@
     Simple("common.items.keys.quarry_keys.miner_key"): "voxel.object.key_rusty-0",
     Simple("common.items.keys.terracotta_key_chest"): "voxel.object.key_terracotta_chest",
     Simple("common.items.keys.terracotta_key_door"): "voxel.object.key_terracotta_door",
+    Simple("common.items.keys.vampire_key"): "voxel.object.key_vampire",
+    Simple("common.items.keys.bloodmoon_key"): "voxel.object.key_bloodmoon",
     // Gliders
     Simple("common.items.glider.cloverleaf"): "voxel.glider.cloverleaf",
     Simple("common.items.glider.basic_white"): "voxel.glider.basic_white",

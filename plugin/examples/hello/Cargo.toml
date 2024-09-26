@@ -10,13 +10,12 @@ package = "component:hello"
 
 [package.metadata.component.target]
 path = "../../wit/veloren.wit"
+world = "server-plugin"
 
 [package.metadata.component.dependencies]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-wit-bindgen = { version = "0.16.0", default-features = false, features = ["realloc"] }
+wit-bindgen-rt = "0.30.0"
 
 [lib]
 crate-type = ["cdylib"]

@@ -167,6 +167,7 @@ impl Body {
                 quadruped_low::Species::Mossdrake => 100.0,
                 quadruped_low::Species::Driggle => 120.0,
                 quadruped_low::Species::Snaretongue => 120.0,
+                quadruped_low::Species::Hydra => 100.0,
             },
             Body::Ship(ship::Body::Carriage) => 40.0,
             Body::Ship(_) => 0.0,
@@ -186,6 +187,7 @@ impl Body {
                 arthropod::Species::Emberfly => 75.0,
             },
             Body::Crustacean(_) => 80.0,
+            Body::Plugin(body) => body.base_accel(),
         }
     }
 
@@ -259,6 +261,7 @@ impl Body {
             Body::Ship(_) => 6.0 / self.dimensions().y,
             Body::Arthropod(_) => 3.5,
             Body::Crustacean(_) => 3.5,
+            Body::Plugin(body) => body.base_ori_rate(),
         }
     }
 
@@ -304,6 +307,7 @@ impl Body {
                 Body::QuadrupedSmall(_) => 1500.0 * self.mass().0,
                 Body::Arthropod(_) => 500.0 * self.mass().0,
                 Body::Crustacean(_) => 400.0 * self.mass().0,
+                Body::Plugin(body) => body.swim_thrust()?,
             } * front_profile,
         )
     }
@@ -312,7 +316,9 @@ impl Body {
     pub fn fly_thrust(&self) -> Option<f32> {
         match self {
             Body::BirdMedium(body) => match body.species {
-                bird_medium::Species::Bat => Some(GRAVITY * self.mass().0 * 0.5),
+                bird_medium::Species::Bat | bird_medium::Species::BloodmoonBat => {
+                    Some(GRAVITY * self.mass().0 * 0.5)
+                },
                 _ => Some(GRAVITY * self.mass().0 * 2.0),
             },
             Body::BirdLarge(_) => Some(GRAVITY * self.mass().0 * 0.5),

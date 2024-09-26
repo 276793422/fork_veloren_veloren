@@ -876,6 +876,14 @@
                 keyword: "toucan",
                 generic: "Toucan"
             ),
+            bloodmoon_bat: (
+                keyword: "bloodmoon_bat",
+                generic: "Bloodmoon Heiress"
+            ),
+            vampire_bat: (
+                keyword: "vampire_bat",
+                generic: "Vampire Bat"
+            ),
         )
     ),
     biped_large: (
@@ -1013,6 +1021,14 @@
             forgemaster: (
                 keyword: "forgemaster",
                 generic: "Forgemaster"
+            ),
+            executioner: (
+                keyword: "executioner",
+                generic: "Executioner"
+            ),
+            strigoi: (
+                keyword: "strigoi",
+                generic: "Strigoi"
             )
         )
     ),
@@ -1237,6 +1253,18 @@
                 keyword: "gnarling_chieftain",
                 generic: "Gnarling Chieftain"
             ),
+            bloodmoon_heiress: (
+                keyword: "bloodmoon_heiress",
+                generic: "Bloodmoon Heiress"
+            ),
+            bloodservant: (
+                keyword: "bloodservant",
+                generic: "Bloodservant"
+            ),
+            harlequin: (
+                keyword: "harlequin",
+                generic: "Harlequin"
+            ),
         )
     ),
     fish_small: (
@@ -1417,6 +1445,10 @@
                 keyword: "driggle",
                 generic: "Driggle"
             ),
+            hydra: (
+                keyword: "hydra",
+                generic: "Hydra"
+            ),
         )
     ),
     arthropod: (
@@ -1491,6 +1523,18 @@
                 keyword: "crab",
                 generic: "Crab",
             ),
-        )
+        ),
+    ),
+    plugin: (
+        body: (
+            keyword: "plugin",
+            names_0: ["Nobody"]
+        ),
+        species: (
+            plugin: (
+                keyword: "unknown",
+                generic: "unknown",
+            ),
+        ),
     ),
 )

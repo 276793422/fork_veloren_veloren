@@ -4,7 +4,6 @@ hud-settings-press_behavior-toggle = Перемикання
 hud-settings-press_behavior-hold = Утримування
 hud-settings-autopress_behavior-toggle = Перемкнути
 hud-settings-autopress_behavior-auto = Автоматично
-hud-settings-help_window = Вікно довідки
 hud-settings-debug_info = Технічна інформація
 hud-settings-show_hitboxes = Відображати хітбокси
 hud-settings-show_chat = Відображати чат
@@ -174,3 +173,6 @@ hud-settings-aim_offset_x = Горизонтальне Зміщення Приц
 hud-settings-aim_offset_y = Вертикальне Зміщення Прицілу
 hud-settings-present_mode-vsync_adaptive = Адаптивна vsync
 hud-settings-language_send_to_server = Надіслати налаштовану мову на сервери (для локалізації правил і "повідомлень дня")
+hud-settings-keybind-helper =
+    ЛМК щоб назначити
+    ПКМ щоб видалити

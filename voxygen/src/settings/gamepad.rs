@@ -110,9 +110,9 @@ pub mod con_settings {
         pub character_window: LayerEntry,
         pub social: LayerEntry,
         pub crafting: LayerEntry,
-        pub spellbook: LayerEntry,
+        pub diary: LayerEntry,
         pub settings: LayerEntry,
-        pub help: LayerEntry,
+        pub controls: LayerEntry,
         pub toggle_interface: LayerEntry,
         pub toggle_debug: LayerEntry,
         #[cfg(feature = "egui-ui")]
@@ -249,7 +249,7 @@ pub mod con_settings {
                     mod1: Button::Simple(GilButton::RightTrigger),
                     mod2: Button::Simple(GilButton::Unknown),
                 },
-                spellbook: LayerEntry {
+                diary: LayerEntry {
                     button: Button::Simple(GilButton::Select),
                     mod1: Button::Simple(GilButton::Unknown),
                     mod2: Button::Simple(GilButton::Unknown),
@@ -259,7 +259,7 @@ pub mod con_settings {
                     mod1: Button::Simple(GilButton::RightTrigger),
                     mod2: Button::Simple(GilButton::Unknown),
                 },
-                help: LayerEntry {
+                controls: LayerEntry {
                     button: Button::Simple(GilButton::Start),
                     mod1: Button::Simple(GilButton::LeftTrigger),
                     mod2: Button::Simple(GilButton::Unknown),
@@ -327,9 +327,9 @@ pub mod con_settings {
         pub character_window: Button,
         pub social: Button,
         pub crafting: Button,
-        pub spellbook: Button,
+        pub diary: Button,
         pub settings: Button,
-        pub help: Button,
+        pub controls: Button,
         pub toggle_interface: Button,
         pub toggle_debug: Button,
         #[cfg(feature = "egui-ui")]
@@ -432,9 +432,9 @@ pub mod con_settings {
                 character_window: Button::Simple(GilButton::Unknown),
                 social: Button::Simple(GilButton::Unknown),
                 crafting: Button::Simple(GilButton::Unknown),
-                spellbook: Button::Simple(GilButton::Unknown),
+                diary: Button::Simple(GilButton::Unknown),
                 settings: Button::Simple(GilButton::Unknown),
-                help: Button::Simple(GilButton::Unknown),
+                controls: Button::Simple(GilButton::Unknown),
                 toggle_interface: Button::Simple(GilButton::Unknown),
                 toggle_debug: Button::Simple(GilButton::Unknown),
                 #[cfg(feature = "egui-ui")]

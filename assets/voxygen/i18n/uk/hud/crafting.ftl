@@ -3,13 +3,6 @@ hud-crafting-recipes = Рецепти
 hud-crafting-ingredients = Інгрідієнти:
 hud-crafting-craft = Створити
 hud-crafting-craft_all = Створити Все
-hud-crafting-repair = Ремонтувати
-hud-crafting-repair_equipped =
-    Ремонтувати
-    екіпіроване
-hud-crafting-repair_all = Ремонтувати все
-hud-crafting-tool_cata = Необхідно:
-hud-crafting-req_crafting_station = Необхідно:
 hud-crafting-anvil = Ковадло
 hud-crafting-cauldron = Казан для зілля
 hud-crafting-cooking_pot = Казан для їжї
@@ -53,3 +46,7 @@ hud-crafting-mod_comp_sec_slot_title = Тваринні матеріали
 hud-crafting-mod_comp_sec_slot_desc = При бажанні покладіть сюди тваринний матеріал, тільки певні інгрідієнти можуть вик. для покращення зброї.
 hud-crafting-repair_slot_title = Пошкоджений предмет
 hud-crafting-repair_slot_desc = Розмістіть предмет тут, щоб побачити вартість його ремонту на поточному рівні міцності.
+hud-crafting-repair_equipped = Екіпіровані
+hud-crafting-repair_all = Всі
+hud-crafting-repair-selection = Обраний
+hud-crafting-tool_cata = Інструменти:

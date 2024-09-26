@@ -99,14 +99,14 @@ pub enum GameInput {
     Social,
     #[strum(serialize = "gameinput-crafting")]
     Crafting,
-    #[strum(serialize = "gameinput-spellbook")]
-    Spellbook,
+    #[strum(serialize = "gameinput-diary")]
+    Diary,
     #[strum(serialize = "gameinput-settings")]
     Settings,
+    #[strum(serialize = "gameinput-controls")]
+    Controls,
     #[strum(serialize = "gameinput-toggleinterface")]
     ToggleInterface,
-    #[strum(serialize = "gameinput-help")]
-    Help,
     #[strum(serialize = "gameinput-toggledebug")]
     ToggleDebug,
     #[cfg(feature = "egui-ui")]

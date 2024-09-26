@@ -69,9 +69,6 @@ main-login-server_full =
 main-login-untrusted_auth_server =
     เซิร์ฟเวอร์ที่ใช้ในการยืนยันรหัสไม่น่าไว้วางใจ
     Auth server not trusted
-main-login-outdated_client_or_server =
-    เซิร์ฟเวอร์ล้มเหลว: อาจเกิดจากตัวเกมไม่ได้รับการอัพเดท โปรดอัพเดทตัวเกม
-    ServerWentMad: Probably versions are incompatible, check for updates.
 main-login-timeout =
     หมดเวลา: เซิร์ฟเวอร์ไม่ตอบกลับในเวลาที่กำหนด (เซิร์ฟเวอร์อาจเต็มหรือเกิดปัญหากับเคลือข่าย)
     Timeout: Server did not respond in time. (Overloaded or network issues).
@@ -134,7 +131,7 @@ main-credits-other_art = การออกแบบอื่น ๆ
 main-credits-contributors = ผู้สนับสนุน
 loading-tips =
     .a0 = ในโลกที่มืดมิดกด '{ $gameinput-togglelantern }' เพื่อจุดตะเกียงได้นะ
-    .a1 = กด '{ $gameinput-help }' เพื่อดูปุ่มควมคุมต่าง ๆ ได้
+    .a1 = กด '{ $gameinput-controls }' เพื่อดูปุ่มควมคุมต่าง ๆ ได้
     .a2 = ใช้คำสั่ง /say หรือ /s ในช่องสนทนาเพื่อพูดคุยกับผู้เล่นที่อยู่ใกล้ ๆ
     .a3 = ใช้คำสั่ง /region หรือ /r ในช่องสนทนาเพื่อพูดคุยกับผู้เล่นที่ในระยะหนึ่งบล็อค
     .a4 = ผู้ที่เป็นแอดมินสามารถใช้คำสั่ง /build เพื่อเข้าสู่โหมดสร้างได้

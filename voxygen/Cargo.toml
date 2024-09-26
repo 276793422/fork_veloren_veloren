@@ -30,11 +30,12 @@ singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["common-frontend/tracy", "client/tracy"]
 tracy-memory = ["tracy"]                                                       # enables heap profiling with tracy
-plugins = ["client/plugins", "common-assets/plugins", "server/plugins"]
+plugins = ["client/plugins", "common-assets/plugins", "server/plugins", "anim/plugins"]
 egui-ui = ["voxygen-egui", "egui", "egui_wgpu_backend", "egui_winit_platform"]
 shaderc-from-source = ["shaderc/build-from-source"]
 discord = ["discord-sdk"]
-bin_img-export = ["common-assets"]
+bin_img_export = ["common-assets"]
+bin_cmd_doc_gen = []
 
 # We don't ship egui with published release builds so a separate feature is required that excludes it.
 default-publish = [
@@ -55,6 +56,7 @@ common-assets = { package = "veloren-common-assets", path = "../common/assets", 
 common-base = { package = "veloren-common-base", path = "../common/base" }
 common-ecs = { package = "veloren-common-ecs", path = "../common/ecs" }
 common-frontend = { package = "veloren-common-frontend", path = "../common/frontend" }
+common-i18n = { package = "veloren-common-i18n", path = "../common/i18n" }
 common-net = { package = "veloren-common-net", path = "../common/net" }
 common-state = { package = "veloren-common-state", path = "../common/state" }
 common-systems = { package = "veloren-common-systems", path = "../common/systems" }
@@ -110,7 +112,7 @@ server = { package = "veloren-server", path = "../server", optional = true, defa
 clap = { workspace = true }
 
 # Utility
-assets_manager = { version = "0.11", features = ["ab_glyph"] }
+assets_manager = { version = "0.12", features = ["ab_glyph"] }
 backtrace = "0.3.40"
 chrono = { workspace = true }
 chumsky = "0.9"
@@ -131,6 +133,7 @@ rayon = { workspace = true }
 rodio = { version = "0.18", default-features = false, features = ["vorbis"] }
 ron = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
+serde_with = { version = "3.9.0", features = ["hashbrown_0_14"] }
 slab = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true }
@@ -172,5 +175,9 @@ harness = false
 name = "meshing_benchmark"
 
 [[bin]]
-name = "img-export"
-required-features = ["bin_img-export"]
+name = "img_export"
+required-features = ["bin_img_export"]
+
+[[bin]]
+name = "cmd_doc_gen"
+required-features = ["bin_cmd_doc_gen"]

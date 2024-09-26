@@ -534,7 +534,7 @@ impl Controls {
                 events.push(Event::LoginAttempt {
                     username: self.login_info.username.trim().to_string(),
                     password: self.login_info.password.clone(),
-                    server_address: self.login_info.server.clone(),
+                    server_address: self.login_info.server.trim().to_string(),
                 });
             },
             Message::UnlockServerField => self.server_field_locked = false,
@@ -583,6 +583,7 @@ impl Controls {
             Message::DeleteServer => {
                 if let Some(server_index) = self.selected_server_index {
                     events.push(Event::DeleteServer { server_index });
+                    self.selected_server_index = None;
                 }
             },
             /* Note: Keeping in case we re-add the disclaimer */

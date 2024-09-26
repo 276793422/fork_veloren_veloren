@@ -21,11 +21,13 @@ macro_rules! synced_components {
     ($macro:ident) => {
         $macro! {
             body: Body,
+            hardcore: Hardcore,
             stats: Stats,
             buffs: Buffs,
             auras: Auras,
             energy: Energy,
             health: Health,
+            heads: Heads,
             poise: Poise,
             light_emitter: LightEmitter,
             loot_owner: LootOwner,
@@ -75,6 +77,7 @@ macro_rules! reexport_comps {
     ($($name:ident: $type:ident,)*) => {
         mod inner {
             pub use common::comp::*;
+            pub use body::parts::Heads;
             use common::link::Is;
             use common::{
                 mounting::{Mount, Rider, VolumeRider},
@@ -116,6 +119,10 @@ impl NetSync for Body {
     const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
 }
 
+impl NetSync for Hardcore {
+    const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
+}
+
 impl NetSync for Stats {
     const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
 }
@@ -152,6 +159,10 @@ impl NetSync for Health {
         // server with the Client's local Time to enable accurate comparison.
         self.last_change.time = *world.read_resource::<Time>();
     }
+}
+
+impl NetSync for Heads {
+    const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
 }
 
 impl NetSync for Poise {

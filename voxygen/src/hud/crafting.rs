@@ -31,7 +31,7 @@ use common::{
 };
 use conrod_core::{
     color, image,
-    position::Dimension,
+    position::{Dimension, Place},
     widget::{self, Button, Image, Rectangle, Scrollbar, Text, TextEdit},
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Widget, WidgetCommon,
 };
@@ -364,6 +364,7 @@ impl<'a> Widget for Crafting<'a> {
             self.item_imgs,
             self.pulse,
             self.msm,
+            self.rbm,
             self.localized_strings,
             self.item_i18n,
         )
@@ -556,43 +557,90 @@ impl<'a> Widget for Crafting<'a> {
         let wood_comp_recipe = make_pseudo_recipe(SpriteKind::CraftingBench);
         let repair_recipe = make_pseudo_recipe(SpriteKind::RepairBench);
 
-        // TODO: localize
+        // A BTreeMap is used over a HashMap as when a HashMap is used, the UI shuffles
+        // the positions of these every tick, so a BTreeMap is necessary to keep it
+        // ordered.
         let pseudo_entries = {
-            // A BTreeMap is used over a HashMap as when a HashMap is used, the UI shuffles
-            // the positions of these every tick, so a BTreeMap is necessary to keep it
-            // ordered.
             let mut pseudo_entries = BTreeMap::new();
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon"),
-                (&weapon_recipe, "Modular Weapon", CraftingTab::Weapon),
+                (
+                    &weapon_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-modular_weapon")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon_component.sword"),
-                (&metal_comp_recipe, "Sword Blade", CraftingTab::Weapon),
+                (
+                    &metal_comp_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-sword")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon_component.axe"),
-                (&metal_comp_recipe, "Axe Head", CraftingTab::Weapon),
+                (
+                    &metal_comp_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-axe")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon_component.hammer"),
-                (&metal_comp_recipe, "Hammer Head", CraftingTab::Weapon),
+                (
+                    &metal_comp_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-hammer")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon_component.bow"),
-                (&wood_comp_recipe, "Bow Limbs", CraftingTab::Weapon),
+                (
+                    &wood_comp_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-bow")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon_component.staff"),
-                (&wood_comp_recipe, "Staff Shaft", CraftingTab::Weapon),
+                (
+                    &wood_comp_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-staff")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.modular_weapon_component.sceptre"),
-                (&wood_comp_recipe, "Sceptre Shaft", CraftingTab::Weapon),
+                (
+                    &wood_comp_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-modular_weapon-sceptre")
+                        .to_string(),
+                    CraftingTab::Weapon,
+                ),
             );
             pseudo_entries.insert(
                 String::from("veloren.core.pseudo_recipe.repair"),
-                (&repair_recipe, "Repair Equipment", CraftingTab::All),
+                (
+                    &repair_recipe,
+                    self.localized_strings
+                        .get_msg("pseudo-recipe-repair")
+                        .to_string(),
+                    CraftingTab::All,
+                ),
             );
             pseudo_entries
         };
@@ -760,7 +808,7 @@ impl<'a> Widget for Crafting<'a> {
             let title;
             let recipe_name =
                 if let Some((_recipe, pseudo_name, _filter_tab)) = pseudo_entries.get(name) {
-                    *pseudo_name
+                    pseudo_name
                 } else {
                     (title, _) = util::item_text(
                         recipe.output.0.as_ref(),
@@ -842,6 +890,7 @@ impl<'a> Widget for Crafting<'a> {
                     Some(SpriteKind::SpinningWheel) => Some("SpinningWheel"),
                     Some(SpriteKind::TanningRack) => Some("TanningRack"),
                     Some(SpriteKind::DismantlingBench) => Some("DismantlingBench"),
+                    Some(SpriteKind::RepairBench) => Some("RepairBench"),
                     _ => None,
                 };
 
@@ -888,7 +937,7 @@ impl<'a> Widget for Crafting<'a> {
             let title = if let Some((_recipe, pseudo_name, _filter_tab)) =
                 pseudo_entries.get(&recipe_name)
             {
-                *pseudo_name
+                pseudo_name
             } else {
                 (title, _) = util::item_text(
                     recipe.output.0.as_ref(),
@@ -967,9 +1016,21 @@ impl<'a> Widget for Crafting<'a> {
                             s.ids.craft_slots.resize(2, &mut ui.widget_id_generator());
                         });
                     }
+
+                    // Crafting instructions
+                    Text::new(&self.localized_strings.get_msg("hud-crafting-modular_desc"))
+                        .mid_top_of(state.ids.align_ing)
+                        .w(264.0)
+                        .center_justify()
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .font_size(self.fonts.cyri.scale(13))
+                        .color(TEXT_COLOR)
+                        .set(state.ids.modular_desc_txt, ui);
+
                     // Modular Weapon Crafting BG-Art
                     Image::new(self.imgs.crafting_modular_art)
-                        .mid_top_with_margin_on(state.ids.align_ing, 55.0)
+                        .down_from(state.ids.modular_desc_txt, 15.0)
+                        .align_middle_x()
                         .w_h(168.0, 250.0)
                         .set(state.ids.modular_art, ui);
 
@@ -1163,7 +1224,7 @@ impl<'a> Widget for Crafting<'a> {
                     // Output Image
                     Image::new(self.imgs.inv_slot)
                         .w_h(80.0, 80.0)
-                        .mid_bottom_with_margin_on(state.ids.align_ing, 50.0)
+                        .mid_bottom_with_margin_on(state.ids.modular_art, 16.0)
                         .parent(state.ids.align_ing)
                         .set(state.ids.output_img_frame, ui);
                     let bg_col = Color::Rgba(1.0, 1.0, 1.0, 0.4);
@@ -1295,12 +1356,6 @@ impl<'a> Widget for Crafting<'a> {
                             recipe_known,
                         )
                     } else {
-                        Text::new(&self.localized_strings.get_msg("hud-crafting-modular_desc"))
-                            .mid_top_with_margin_on(state.ids.modular_art, -18.0)
-                            .font_id(self.fonts.cyri.conrod_id)
-                            .font_size(self.fonts.cyri.scale(13))
-                            .color(TEXT_COLOR)
-                            .set(state.ids.title_main, ui);
                         Image::new(self.imgs.icon_mod_weap)
                             .middle_of(state.ids.output_img_frame)
                             .color(Some(bg_col))
@@ -1427,6 +1482,16 @@ impl<'a> Widget for Crafting<'a> {
                         });
                     }
 
+                    // Repair instructions
+                    Text::new(&self.localized_strings.get_msg("hud-crafting-repair_desc"))
+                        .mid_top_of(state.ids.align_ing)
+                        .w(264.0)
+                        .center_justify()
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .font_size(self.fonts.cyri.scale(13))
+                        .color(TEXT_COLOR)
+                        .set(state.ids.modular_desc_txt, ui);
+
                     // Slot for item to be repaired
                     let repair_slot = CraftSlot {
                         index: 0,
@@ -1436,8 +1501,9 @@ impl<'a> Widget for Crafting<'a> {
                     };
 
                     let repair_slot_widget = slot_maker
-                        .fabricate(repair_slot, [40.0; 2])
-                        .top_left_with_margins_on(state.ids.align_ing, 20.0, 40.0)
+                        .fabricate(repair_slot, [80.0; 2])
+                        .down_from(state.ids.modular_desc_txt, 15.0)
+                        .align_middle_x()
                         .parent(state.ids.align_ing);
 
                     if let Some(item) = repair_slot.item(self.inventory) {
@@ -1465,6 +1531,14 @@ impl<'a> Widget for Crafting<'a> {
                             .set(state.ids.craft_slots[0], ui);
                     }
 
+                    if repair_slot.slot.is_none() {
+                        Image::new(self.imgs.icon_mod_weap)
+                            .middle_of(state.ids.craft_slots[0])
+                            .w_h(70.0, 70.0)
+                            .graphics_for(state.ids.craft_slots[0])
+                            .set(state.ids.modular_wep_ing_1_bg, ui);
+                    }
+
                     let can_repair = |item: &Item| {
                         // Check that item needs to be repaired, and that inventory has sufficient
                         // materials to repair
@@ -1479,24 +1553,47 @@ impl<'a> Widget for Crafting<'a> {
                             )
                     };
 
+                    let can_perform = self.show.crafting_fields.craft_sprite.map(|(_, s)| s)
+                        == recipe.craft_sprite;
+
+                    let color = if can_perform {
+                        TEXT_COLOR
+                    } else {
+                        TEXT_GRAY_COLOR
+                    };
+
+                    let btn_image_hover = if can_perform {
+                        self.imgs.button_hover
+                    } else {
+                        self.imgs.button
+                    };
+
+                    let btn_image_press = if can_perform {
+                        self.imgs.button_press
+                    } else {
+                        self.imgs.button
+                    };
+
                     // Repair equipped button
                     if Button::image(self.imgs.button)
                         .w_h(105.0, 25.0)
-                        .hover_image(self.imgs.button_hover)
-                        .press_image(self.imgs.button_press)
+                        .hover_image(btn_image_hover)
+                        .press_image(btn_image_press)
                         .label(
                             &self
                                 .localized_strings
                                 .get_msg("hud-crafting-repair_equipped"),
                         )
                         .label_y(conrod_core::position::Relative::Scalar(1.0))
-                        .label_color(TEXT_COLOR)
+                        .label_color(color)
                         .label_font_size(self.fonts.cyri.scale(12))
                         .label_font_id(self.fonts.cyri.conrod_id)
-                        .image_color(TEXT_COLOR)
-                        .top_right_with_margins_on(state.ids.align_ing, 20.0, 20.0)
+                        .image_color(color)
+                        .down_from(state.ids.craft_slots[0], 45.0)
+                        .x_relative_to(state.ids.craft_slots[0], 0.0)
                         .set(state.ids.repair_buttons[0], ui)
                         .was_clicked()
+                        && can_perform
                     {
                         self.inventory
                             .equipped_items_with_slot()
@@ -1511,17 +1608,19 @@ impl<'a> Widget for Crafting<'a> {
                     // Repair all button
                     if Button::image(self.imgs.button)
                         .w_h(105.0, 25.0)
-                        .hover_image(self.imgs.button_hover)
-                        .press_image(self.imgs.button_press)
+                        .hover_image(btn_image_hover)
+                        .press_image(btn_image_press)
                         .label(&self.localized_strings.get_msg("hud-crafting-repair_all"))
                         .label_y(conrod_core::position::Relative::Scalar(1.0))
-                        .label_color(TEXT_COLOR)
+                        .label_color(color)
                         .label_font_size(self.fonts.cyri.scale(12))
                         .label_font_id(self.fonts.cyri.conrod_id)
-                        .image_color(TEXT_COLOR)
-                        .mid_bottom_with_margin_on(state.ids.repair_buttons[0], -45.0)
+                        .image_color(color)
+                        .down_from(state.ids.repair_buttons[0], 5.0)
+                        .x_relative_to(state.ids.craft_slots[0], 0.0)
                         .set(state.ids.repair_buttons[1], ui)
                         .was_clicked()
+                        && can_perform
                     {
                         self.inventory
                             .equipped_items_with_slot()
@@ -1541,7 +1640,8 @@ impl<'a> Widget for Crafting<'a> {
                             });
                     }
 
-                    let can_perform = repair_slot.item(self.inventory).map_or(false, can_repair);
+                    let can_perform =
+                        repair_slot.item(self.inventory).map_or(false, can_repair) && can_perform;
 
                     (repair_slot.slot, None, can_perform, true)
                 },
@@ -1549,7 +1649,9 @@ impl<'a> Widget for Crafting<'a> {
 
             // Craft button
             let label = &match recipe_kind {
-                RecipeKind::Repair => self.localized_strings.get_msg("hud-crafting-repair"),
+                RecipeKind::Repair => self
+                    .localized_strings
+                    .get_msg("hud-crafting-repair-selection"),
                 _ => self.localized_strings.get_msg("hud-crafting-craft"),
             };
             let craft_button_init = Button::image(self.imgs.button)
@@ -1578,8 +1680,15 @@ impl<'a> Widget for Crafting<'a> {
                 } else {
                     TEXT_GRAY_COLOR
                 })
-                .bottom_left_with_margins_on(state.ids.align_ing, -31.0, 15.0)
-                .parent(state.ids.window_frame);
+                .and(|b| match recipe_kind {
+                    RecipeKind::Repair => b
+                        .down_from(state.ids.craft_slots[0], 15.0)
+                        .x_relative_to(state.ids.craft_slots[0], 0.0)
+                        .parent(state.ids.align_ing),
+                    _ => b
+                        .bottom_left_with_margins_on(state.ids.align_ing, -31.0, 10.0)
+                        .parent(state.ids.window_frame),
+                });
 
             let craft_button = if !recipe_known {
                 craft_button_init
@@ -1639,42 +1748,40 @@ impl<'a> Widget for Crafting<'a> {
             }
 
             // Craft All button
-            let can_perform_all = can_perform && matches!(recipe_kind, RecipeKind::Simple);
-            if Button::image(self.imgs.button)
-                .w_h(105.0, 25.0)
-                .hover_image(if can_perform {
-                    self.imgs.button_hover
-                } else {
-                    self.imgs.button
-                })
-                .press_image(if can_perform {
-                    self.imgs.button_press
-                } else {
-                    self.imgs.button
-                })
-                .label(&self.localized_strings.get_msg("hud-crafting-craft_all"))
-                .label_y(conrod_core::position::Relative::Scalar(1.0))
-                .label_color(if can_perform_all {
-                    TEXT_COLOR
-                } else {
-                    TEXT_GRAY_COLOR
-                })
-                .label_font_size(self.fonts.cyri.scale(12))
-                .label_font_id(self.fonts.cyri.conrod_id)
-                .image_color(if can_perform_all {
-                    TEXT_COLOR
-                } else {
-                    TEXT_GRAY_COLOR
-                })
-                .bottom_right_with_margins_on(state.ids.align_ing, -31.0, 15.0)
-                .parent(state.ids.window_frame)
-                .set(state.ids.btn_craft_all, ui)
-                .was_clicked()
-                && can_perform_all
+            if matches!(recipe_kind, RecipeKind::Simple)
+                && Button::image(self.imgs.button)
+                    .w_h(105.0, 25.0)
+                    .hover_image(if can_perform {
+                        self.imgs.button_hover
+                    } else {
+                        self.imgs.button
+                    })
+                    .press_image(if can_perform {
+                        self.imgs.button_press
+                    } else {
+                        self.imgs.button
+                    })
+                    .label(&self.localized_strings.get_msg("hud-crafting-craft_all"))
+                    .label_y(conrod_core::position::Relative::Scalar(1.0))
+                    .label_color(if can_perform {
+                        TEXT_COLOR
+                    } else {
+                        TEXT_GRAY_COLOR
+                    })
+                    .label_font_size(self.fonts.cyri.scale(12))
+                    .label_font_id(self.fonts.cyri.conrod_id)
+                    .image_color(if can_perform {
+                        TEXT_COLOR
+                    } else {
+                        TEXT_GRAY_COLOR
+                    })
+                    .bottom_right_with_margins_on(state.ids.align_ing, -31.0, 10.0)
+                    .parent(state.ids.window_frame)
+                    .set(state.ids.btn_craft_all, ui)
+                    .was_clicked()
+                && can_perform
             {
-                if let (RecipeKind::Simple, Some(selected_recipe)) =
-                    (recipe_kind, &state.selected_recipe)
-                {
+                if let Some(selected_recipe) = &state.selected_recipe {
                     let amount = recipe.max_from_ingredients(self.inventory);
                     if amount > 0 {
                         events.push(Event::CraftRecipe {
@@ -1701,12 +1808,12 @@ impl<'a> Widget for Crafting<'a> {
                     RecipeKind::Simple => {
                         t.top_left_with_margins_on(state.ids.align_ing, 10.0, 5.0)
                     },
-                    RecipeKind::ModularWeapon | RecipeKind::Component(_) => {
-                        t.top_left_with_margins_on(state.ids.align_ing, 325.0, 5.0)
-                    },
-                    RecipeKind::Repair => {
-                        t.top_left_with_margins_on(state.ids.align_ing, 80.0, 5.0)
-                    },
+                    RecipeKind::ModularWeapon | RecipeKind::Component(_) => t
+                        .down_from(state.ids.modular_art, 25.0)
+                        .x_place_on(state.ids.align_ing, Place::Start(Some(5.0))),
+                    RecipeKind::Repair => t
+                        .down_from(state.ids.repair_buttons[1], 20.0)
+                        .x_place_on(state.ids.align_ing, Place::Start(Some(5.0))),
                 })
                 .set(state.ids.req_station_title, ui);
                 let station_img = match recipe.craft_sprite {
@@ -1960,15 +2067,7 @@ impl<'a> Widget for Crafting<'a> {
                     } else {
                         state.ids.ingredient_frame[i - 1]
                     };
-                    // add a larger offset for the the first ingredient and the "Required Text
-                    // for Catalysts/Tools"
-                    let frame_offset = if i == 0 {
-                        10.0
-                    } else if amount == 0 {
-                        5.0
-                    } else {
-                        0.0
-                    };
+
                     let quality_col_img = match &item_def.quality() {
                         Quality::Low => self.imgs.inv_slot_grey,
                         Quality::Common => self.imgs.inv_slot,
@@ -1981,9 +2080,9 @@ impl<'a> Widget for Crafting<'a> {
                     };
                     let frame = Image::new(quality_col_img).w_h(25.0, 25.0);
                     let frame = if amount == 0 {
-                        frame.down_from(state.ids.req_text[i], 10.0 + frame_offset)
+                        frame.down_from(state.ids.req_text[i], 10.0)
                     } else {
-                        frame.down_from(frame_pos, 10.0 + frame_offset)
+                        frame.down_from(frame_pos, 10.0)
                     };
                     frame.set(state.ids.ingredient_frame[i], ui);
                     // Item button for auto search
@@ -2034,9 +2133,9 @@ impl<'a> Widget for Crafting<'a> {
                             state.ids.ingredient_frame[i - 1]
                         };
                         Text::new(&self.localized_strings.get_msg("hud-crafting-tool_cata"))
-                            .down_from(ref_widget, 20.0)
+                            .down_from(ref_widget, 10.0)
                             .font_id(self.fonts.cyri.conrod_id)
-                            .font_size(self.fonts.cyri.scale(14))
+                            .font_size(self.fonts.cyri.scale(18))
                             .color(TEXT_COLOR)
                             .set(state.ids.req_text[i], ui);
 

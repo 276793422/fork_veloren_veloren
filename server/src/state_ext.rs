@@ -180,7 +180,8 @@ impl StateExt for State {
         inventory: Inventory,
         body: comp::Body,
     ) -> EcsEntityBuilder {
-        self.ecs_mut()
+        let npc = self
+            .ecs_mut()
             .create_entity_synced()
             .with(pos)
             .with(comp::Vel(Vec3::zero()))
@@ -209,6 +210,9 @@ impl StateExt for State {
             .with(comp::Auras::default())
             .with(comp::EnteredAuras::default())
             .with(comp::Stance::default())
+            .maybe_with(body.heads().map(comp::body::parts::Heads::new));
+
+        npc
     }
 
     fn create_empty(&mut self, pos: comp::Pos) -> EcsEntityBuilder {
@@ -575,6 +579,7 @@ impl StateExt for State {
     ) -> Result<(), String> {
         let PersistedComponents {
             body,
+            hardcore,
             stats,
             skill_set,
             inventory,
@@ -634,6 +639,10 @@ impl StateExt for State {
                 entity,
                 comp::InventoryUpdate::new(comp::InventoryUpdateEvent::default()),
             );
+
+            if let Some(hardcore) = hardcore {
+                self.write_component_ignore_entity_dead(entity, hardcore);
+            }
 
             if let Some(waypoint) = waypoint {
                 self.write_component_ignore_entity_dead(entity, RepositionOnChunkLoad {
@@ -754,7 +763,7 @@ impl StateExt for State {
                 if let Some(note) = note {
                     let _ = client.send(ServerGeneral::server_msg(
                         ChatType::CommandInfo,
-                        format!("{}", note),
+                        Content::Plain(format!("{}", note)),
                     ));
                 }
                 true
@@ -762,7 +771,7 @@ impl StateExt for State {
             Err(err) => {
                 let _ = client.send(ServerGeneral::server_msg(
                     ChatType::CommandError,
-                    format!("{}", err),
+                    Content::Plain(format!("{}", err)),
                 ));
                 false
             },
@@ -1167,7 +1176,9 @@ pub fn position_mut<T>(
         .or_else(|| {
             is_volume_riders.get(entity).and_then(|volume_rider| {
                 Some(match volume_rider.pos.kind {
-                    common::mounting::Volume::Terrain => Err("Tried to move the world."),
+                    common::mounting::Volume::Terrain => {
+                        Err(Content::Plain("Tried to move the world.".to_string()))
+                    },
                     common::mounting::Volume::Entity(uid) => Ok(id_maps.uid_entity(uid)?),
                 })
             })

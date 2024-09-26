@@ -509,6 +509,8 @@ impl<'a> AgentData<'a> {
                                 matches!(
                                     spec.as_str(),
                                     "Simple Flying Melee"
+                                        | "Bloodmoon Bat"
+                                        | "Vampire Bat"
                                         | "Flame Wyvern"
                                         | "Frost Wyvern"
                                         | "Cloud Wyvern"
@@ -740,7 +742,7 @@ impl<'a> AgentData<'a> {
         relaxed: bool,
     ) -> bool {
         // Wait for potion sickness to wear off if potions are less than 50% effective.
-        let heal_multiplier = self.stats.map_or(1.0, |s| s.heal_multiplier);
+        let heal_multiplier = self.stats.map_or(1.0, |s| s.item_effect_reduction);
         if heal_multiplier < 0.5 {
             return false;
         }
@@ -754,7 +756,7 @@ impl<'a> AgentData<'a> {
                 },
                 Effect::Buff(BuffEffect { kind, data, .. }) => {
                     if let Some(duration) = data.duration {
-                        for effect in kind.effects(data, self.stats) {
+                        for effect in kind.effects(data) {
                             match effect {
                                 comp::BuffEffect::HealthChangeOverTime { rate, kind, .. } => {
                                     let amount = match kind {
@@ -766,7 +768,7 @@ impl<'a> AgentData<'a> {
 
                                     value += amount;
                                 },
-                                comp::BuffEffect::HealReduction(amount) => {
+                                comp::BuffEffect::ItemEffectReduction(amount) => {
                                     heal_reduction =
                                         heal_reduction + amount - heal_reduction * amount;
                                 },
@@ -1128,9 +1130,8 @@ impl<'a> AgentData<'a> {
                             "Flame Wyvern" | "Frost Wyvern" | "Cloud Wyvern" | "Sea Wyvern"
                             | "Weald Wyvern" => Tactic::Wyvern,
                             "Bird Medium Basic" => Tactic::BirdMediumBasic,
-                            "Bushly" | "Irrwurz" | "Driggle" | "Mossy Snail" => {
-                                Tactic::SimpleDouble
-                            },
+                            "Bushly" | "Irrwurz" | "Driggle" | "Mossy Snail" | "Strigoi Claws"
+                            | "Harlequin" => Tactic::SimpleDouble,
                             "Clay Golem" => Tactic::ClayGolem,
                             "Ancient Effigy" => Tactic::AncientEffigy,
                             "TerracottaStatue" | "Mogwai" => Tactic::TerracottaStatue,
@@ -1174,6 +1175,7 @@ impl<'a> AgentData<'a> {
                             "Adlet Hunter" => Tactic::AdletHunter,
                             "Adlet Icepicker" => Tactic::AdletIcepicker,
                             "Adlet Tracker" => Tactic::AdletTracker,
+                            "Hydra" => Tactic::Hydra,
                             "Ice Drake" => Tactic::IceDrake,
                             "Frostfang" => Tactic::RandomAbilities {
                                 primary: 1,
@@ -1189,6 +1191,10 @@ impl<'a> AgentData<'a> {
                             "Haniwa Soldier" => Tactic::HaniwaSoldier,
                             "Haniwa Guard" => Tactic::HaniwaGuard,
                             "Haniwa Archer" => Tactic::HaniwaArcher,
+                            "Bloodmoon Bat" => Tactic::BloodmoonBat,
+                            "Vampire Bat" => Tactic::VampireBat,
+                            "Bloodmoon Heiress" => Tactic::BloodmoonHeiress,
+
                             _ => Tactic::SimpleMelee,
                         },
                         AbilitySpec::Tool(tool_kind) => tool_tactic(*tool_kind),
@@ -1730,6 +1736,33 @@ impl<'a> AgentData<'a> {
             Tactic::IceDrake => {
                 self.handle_icedrake(agent, controller, &attack_data, tgt_data, read_data, rng)
             },
+            Tactic::Hydra => {
+                self.handle_hydra(agent, controller, &attack_data, tgt_data, read_data, rng)
+            },
+            Tactic::BloodmoonBat => self.handle_bloodmoon_bat_attack(
+                agent,
+                controller,
+                &attack_data,
+                tgt_data,
+                read_data,
+                rng,
+            ),
+            Tactic::VampireBat => self.handle_vampire_bat_attack(
+                agent,
+                controller,
+                &attack_data,
+                tgt_data,
+                read_data,
+                rng,
+            ),
+            Tactic::BloodmoonHeiress => self.handle_bloodmoon_heiress_attack(
+                agent,
+                controller,
+                &attack_data,
+                tgt_data,
+                read_data,
+                rng,
+            ),
             Tactic::RandomAbilities {
                 primary,
                 secondary,

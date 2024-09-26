@@ -890,7 +890,6 @@ impl TradeAmountInput {
 pub struct Show {
     ui: bool,
     intro: bool,
-    help: bool,
     crafting: bool,
     bag: bool,
     bag_inv: bool,
@@ -1051,7 +1050,7 @@ impl Show {
 
     fn toggle_crafting(&mut self) { self.crafting(!self.crafting) }
 
-    fn toggle_spell(&mut self) { self.diary(!self.diary) }
+    fn toggle_diary(&mut self) { self.diary(!self.diary) }
 
     fn toggle_ui(&mut self) { self.ui = !self.ui; }
 
@@ -1075,7 +1074,6 @@ impl Show {
     }
 
     // TODO: Add self updating key-bindings element
-    //fn toggle_help(&mut self) { self.help = !self.help }
 
     fn any_window_requires_cursor(&self) -> bool {
         self.bag
@@ -1085,7 +1083,6 @@ impl Show {
             || self.social
             || self.crafting
             || self.diary
-            || self.help
             || self.intro
             || self.quest
             || !matches!(self.open_windows, Windows::None)
@@ -1096,7 +1093,6 @@ impl Show {
             self.bag = false;
             self.trade = false;
             self.esc_menu = false;
-            self.help = false;
             self.intro = false;
             self.map = false;
             self.social = false;
@@ -1298,6 +1294,7 @@ pub struct Hud {
     voxel_minimap: VoxelMinimap,
     map_drag: Vec2<f64>,
     force_chat: bool,
+    clear_chat: bool,
 }
 
 impl Hud {
@@ -1381,7 +1378,6 @@ impl Hud {
             //intro: false,
             //intro_2: false,
             show: Show {
-                help: false,
                 intro: false,
                 bag: false,
                 bag_inv: false,
@@ -1435,8 +1431,11 @@ impl Hud {
             },
             map_drag: Vec2::zero(),
             force_chat: false,
+            clear_chat: false,
         }
     }
+
+    pub fn clear_chat(&mut self) { self.clear_chat = true; }
 
     pub fn set_prompt_dialog(&mut self, prompt_dialog: PromptDialogSettings) {
         self.show.prompt_dialog = Some(prompt_dialog);
@@ -1490,6 +1489,7 @@ impl Hud {
             let stats = ecs.read_storage::<comp::Stats>();
             let skill_sets = ecs.read_storage::<comp::SkillSet>();
             let healths = ecs.read_storage::<Health>();
+            let hardcore = ecs.read_storage::<comp::Hardcore>();
             let buffs = ecs.read_storage::<comp::Buffs>();
             let energy = ecs.read_storage::<comp::Energy>();
             let mut hp_floater_lists = ecs.write_storage::<HpFloaterList>();
@@ -1595,30 +1595,28 @@ impl Hud {
                     5.0 * dt.as_secs_f32(),
                 );
 
-                if !self.show.help {
-                    Image::new(
-                        // TODO: Do we want to match on this every frame?
-                        match global_state.settings.interface.crosshair_type {
-                            CrosshairType::Round => self.imgs.crosshair_outer_round,
-                            CrosshairType::RoundEdges => self.imgs.crosshair_outer_round_edges,
-                            CrosshairType::Edges => self.imgs.crosshair_outer_edges,
-                        },
-                    )
-                    .w_h(21.0 * 1.5, 21.0 * 1.5)
-                    .middle_of(ui_widgets.window)
-                    .color(Some(Color::Rgba(
-                        1.0,
-                        1.0,
-                        1.0,
-                        self.crosshair_opacity * global_state.settings.interface.crosshair_opacity,
-                    )))
-                    .set(self.ids.crosshair_outer, ui_widgets);
-                    Image::new(self.imgs.crosshair_inner)
-                        .w_h(21.0 * 2.0, 21.0 * 2.0)
-                        .middle_of(self.ids.crosshair_outer)
-                        .color(Some(Color::Rgba(1.0, 1.0, 1.0, 0.6)))
-                        .set(self.ids.crosshair_inner, ui_widgets);
-                }
+                Image::new(
+                    // TODO: Do we want to match on this every frame?
+                    match global_state.settings.interface.crosshair_type {
+                        CrosshairType::Round => self.imgs.crosshair_outer_round,
+                        CrosshairType::RoundEdges => self.imgs.crosshair_outer_round_edges,
+                        CrosshairType::Edges => self.imgs.crosshair_outer_edges,
+                    },
+                )
+                .w_h(21.0 * 1.5, 21.0 * 1.5)
+                .middle_of(ui_widgets.window)
+                .color(Some(Color::Rgba(
+                    1.0,
+                    1.0,
+                    1.0,
+                    self.crosshair_opacity * global_state.settings.interface.crosshair_opacity,
+                )))
+                .set(self.ids.crosshair_outer, ui_widgets);
+                Image::new(self.imgs.crosshair_inner)
+                    .w_h(21.0 * 2.0, 21.0 * 2.0)
+                    .middle_of(self.ids.crosshair_outer)
+                    .color(Some(Color::Rgba(1.0, 1.0, 1.0, 0.6)))
+                    .set(self.ids.crosshair_inner, ui_widgets);
             }
 
             // Max amount the sct font size increases when "flashing"
@@ -2406,6 +2404,7 @@ impl Hud {
                             } else {
                                 None
                             },
+                            hardcore: hardcore.contains(entity),
                             stance,
                         });
                         // Only render bubble if nearby or if its me and setting is on
@@ -2992,8 +2991,12 @@ impl Hud {
         }
 
         if global_state.settings.interface.toggle_hotkey_hints {
-            // Help Window
-            if let Some(help_key) = global_state.settings.controls.get_binding(GameInput::Help) {
+            // Controls, Keybindings
+            if let Some(help_key) = global_state
+                .settings
+                .controls
+                .get_binding(GameInput::Controls)
+            {
                 Text::new(&i18n.get_msg_ctx(
                     "hud-press_key_to_show_keybindings_fmt",
                     &i18n::fluent_args! {
@@ -3203,6 +3206,7 @@ impl Hud {
                 i18n,
                 &self.item_i18n,
                 &msm,
+                &rbm,
                 self.floaters.combo_floater,
                 &context,
                 combo,
@@ -3216,7 +3220,7 @@ impl Hud {
                     self.show.diary(true);
                     self.show.open_skill_tree(skillgroup);
                 },
-                Some(skillbar::Event::OpenBag) => self.show.bag = !self.show.bag,
+                Some(skillbar::Event::OpenBag) => self.show.bag(!self.show.bag),
                 None => {},
             }
         }
@@ -3258,6 +3262,7 @@ impl Hud {
                     &self.show,
                     body,
                     &msm,
+                    &rbm,
                     poise,
                 )
                 .set(self.ids.bag, ui_widgets)
@@ -3297,6 +3302,7 @@ impl Hud {
                 i18n,
                 &self.item_i18n,
                 &msm,
+                &rbm,
                 self.pulse,
                 &mut self.show,
             )
@@ -3496,6 +3502,7 @@ impl Hud {
             i18n,
             &self.item_i18n,
             &msm,
+            &rbm,
             item_tooltip_manager,
             self.pulse,
         )
@@ -3524,6 +3531,7 @@ impl Hud {
                 &self.fonts,
                 i18n,
                 scale,
+                self.clear_chat,
             )
             .and_then(self.force_chat_input.take(), |c, input| c.input(input))
             .and_then(self.tab_complete.take(), |c, input| {
@@ -3575,6 +3583,7 @@ impl Hud {
 
         self.new_messages.clear();
         self.new_notifications.clear();
+        self.clear_chat = false;
 
         // Windows
 
@@ -3610,18 +3619,6 @@ impl Hud {
                         self.show.chat_tab_settings_index = tab;
                     },
                     settings_window::Event::SettingsChange(settings_change) => {
-                        match &settings_change {
-                            SettingsChange::Interface(interface_change) => match interface_change {
-                                InterfaceChange::ToggleHelp(toggle_help) => {
-                                    self.show.help = *toggle_help;
-                                },
-                                InterfaceChange::ResetInterfaceSettings => {
-                                    self.show.help = false;
-                                },
-                                _ => {},
-                            },
-                            _ => {},
-                        }
                         events.push(Event::SettingsChange(settings_change));
                     },
                 }
@@ -4789,15 +4786,15 @@ impl Hud {
                         self.show.toggle_crafting();
                         true
                     },
-                    GameInput::Spellbook if state => {
-                        self.show.toggle_spell();
+                    GameInput::Diary if state => {
+                        self.show.toggle_diary();
                         true
                     },
                     GameInput::Settings if state => {
                         self.show.toggle_settings(global_state);
                         true
                     },
-                    GameInput::Help if state => {
+                    GameInput::Controls if state => {
                         self.show.toggle_settings(global_state);
                         self.show.settings_tab = SettingsTab::Controls;
                         true

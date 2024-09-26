@@ -2,7 +2,8 @@ mod cache;
 pub mod load;
 mod volume;
 
-pub use cache::FigureModelCache;
+pub(super) use cache::FigureModelCache;
+use common_net::synced_components::Heads;
 pub use load::load_mesh; // TODO: Don't make this public.
 pub use volume::VolumeKey;
 
@@ -25,6 +26,8 @@ use crate::{
         SceneData, TrailMgr, RAIN_THRESHOLD,
     },
 };
+#[cfg(feature = "plugins")]
+use anim::plugin::PluginSkeleton;
 use anim::{
     arthropod::ArthropodSkeleton, biped_large::BipedLargeSkeleton, biped_small::BipedSmallSkeleton,
     bird_large::BirdLargeSkeleton, bird_medium::BirdMediumSkeleton, character::CharacterSkeleton,
@@ -36,6 +39,7 @@ use anim::{
 };
 use common::{
     comp::{
+        body::parts::HeadState,
         inventory::slot::EquipSlot,
         item::{armor::ArmorKind, Hands, ItemKind, ToolKind},
         ship::{self, figuredata::VOXEL_COLLIDER_MANIFEST},
@@ -214,6 +218,8 @@ struct FigureMgrStates {
     volume_states: HashMap<EcsEntity, FigureState<VolumeKey, BoundTerrainLocals>>,
     arthropod_states: HashMap<EcsEntity, FigureState<ArthropodSkeleton>>,
     crustacean_states: HashMap<EcsEntity, FigureState<CrustaceanSkeleton>>,
+    #[cfg(feature = "plugins")]
+    plugin_states: HashMap<EcsEntity, FigureState<PluginSkeleton>>,
 }
 
 impl FigureMgrStates {
@@ -238,6 +244,8 @@ impl FigureMgrStates {
             volume_states: HashMap::new(),
             arthropod_states: HashMap::new(),
             crustacean_states: HashMap::new(),
+            #[cfg(feature = "plugins")]
+            plugin_states: HashMap::new(),
         }
     }
 
@@ -313,6 +321,12 @@ impl FigureMgrStates {
                 .crustacean_states
                 .get_mut(entity)
                 .map(DerefMut::deref_mut),
+            Body::Plugin(_body) => {
+                #[cfg(not(feature = "plugins"))]
+                unreachable!("Plugins require feature");
+                #[cfg(feature = "plugins")]
+                self.plugin_states.get_mut(entity).map(DerefMut::deref_mut)
+            },
         }
     }
 
@@ -348,6 +362,12 @@ impl FigureMgrStates {
             },
             Body::Arthropod(_) => self.arthropod_states.remove(entity).map(|e| e.meta),
             Body::Crustacean(_) => self.crustacean_states.remove(entity).map(|e| e.meta),
+            Body::Plugin(_) => {
+                #[cfg(not(feature = "plugins"))]
+                unreachable!("Plugins require feature");
+                #[cfg(feature = "plugins")]
+                self.plugin_states.remove(entity).map(|e| e.meta)
+            },
         }
     }
 
@@ -372,9 +392,15 @@ impl FigureMgrStates {
         self.volume_states.retain(|k, v| f(k, &mut *v));
         self.arthropod_states.retain(|k, v| f(k, &mut *v));
         self.crustacean_states.retain(|k, v| f(k, &mut *v));
+        #[cfg(feature = "plugins")]
+        self.plugin_states.retain(|k, v| f(k, &mut *v));
     }
 
     fn count(&self) -> usize {
+        #[cfg(feature = "plugins")]
+        let plugin_states = self.plugin_states.len();
+        #[cfg(not(feature = "plugins"))]
+        let plugin_states = 0;
         self.character_states.len()
             + self.quadruped_small_states.len()
             + self.character_states.len()
@@ -395,9 +421,18 @@ impl FigureMgrStates {
             + self.volume_states.len()
             + self.arthropod_states.len()
             + self.crustacean_states.len()
+            + plugin_states
     }
 
     fn count_visible(&self) -> usize {
+        #[cfg(feature = "plugins")]
+        let plugin_states = self
+            .plugin_states
+            .iter()
+            .filter(|(_, c)| c.visible())
+            .count();
+        #[cfg(not(feature = "plugins"))]
+        let plugin_states = 0;
         self.character_states
             .iter()
             .filter(|(_, c)| c.visible())
@@ -488,6 +523,7 @@ impl FigureMgrStates {
                 .iter()
                 .filter(|(_, c)| c.visible())
                 .count()
+            + plugin_states
     }
 
     fn get_terrain_locals<'a, Q>(
@@ -535,6 +571,8 @@ pub struct FigureMgr {
     volume_model_cache: FigureModelCache<VolumeKey>,
     arthropod_model_cache: FigureModelCache<ArthropodSkeleton>,
     crustacean_model_cache: FigureModelCache<CrustaceanSkeleton>,
+    #[cfg(feature = "plugins")]
+    plugin_model_cache: FigureModelCache<PluginSkeleton>,
     states: FigureMgrStates,
 }
 
@@ -561,6 +599,8 @@ impl FigureMgr {
             volume_model_cache: FigureModelCache::new(),
             arthropod_model_cache: FigureModelCache::new(),
             crustacean_model_cache: FigureModelCache::new(),
+            #[cfg(feature = "plugins")]
+            plugin_model_cache: FigureModelCache::new(),
             states: FigureMgrStates::default(),
         }
     }
@@ -568,6 +608,10 @@ impl FigureMgr {
     pub fn atlas(&self) -> &FigureAtlas { &self.atlas }
 
     fn any_watcher_reloaded(&mut self) -> bool {
+        #[cfg(feature = "plugins")]
+        let plugin_reloaded = self.plugin_model_cache.watcher_reloaded();
+        #[cfg(not(feature = "plugins"))]
+        let plugin_reloaded = false;
         self.model_cache.watcher_reloaded()
             || self.theropod_model_cache.watcher_reloaded()
             || self.quadruped_small_model_cache.watcher_reloaded()
@@ -587,6 +631,7 @@ impl FigureMgr {
             || self.volume_model_cache.watcher_reloaded()
             || self.arthropod_model_cache.watcher_reloaded()
             || self.crustacean_model_cache.watcher_reloaded()
+            || plugin_reloaded
     }
 
     pub fn clean(&mut self, tick: u64) {
@@ -614,6 +659,8 @@ impl FigureMgr {
             self.volume_model_cache.clear_models();
             self.arthropod_model_cache.clear_models();
             self.crustacean_model_cache.clear_models();
+            #[cfg(feature = "plugins")]
+            self.plugin_model_cache.clear_models();
         }
 
         self.model_cache.clean(&mut self.atlas, tick);
@@ -637,6 +684,8 @@ impl FigureMgr {
         self.volume_model_cache.clean(&mut self.atlas, tick);
         self.arthropod_model_cache.clean(&mut self.atlas, tick);
         self.crustacean_model_cache.clean(&mut self.atlas, tick);
+        #[cfg(feature = "plugins")]
+        self.plugin_model_cache.clean(&mut self.atlas, tick);
     }
 
     pub fn update_lighting(&mut self, scene_data: &SceneData) {
@@ -869,7 +918,7 @@ impl FigureMgr {
                 inventory,
                 item,
                 light_emitter,
-                (is_rider, is_volume_rider, collider),
+                (is_rider, is_volume_rider, collider, heads),
             ),
         ) in (
             &ecs.entities(),
@@ -891,6 +940,7 @@ impl FigureMgr {
                 ecs.read_storage::<Is<Rider>>().maybe(),
                 ecs.read_storage::<Is<VolumeRider>>().maybe(),
                 ecs.read_storage::<Collider>().maybe(),
+                ecs.read_storage::<Heads>().maybe(),
             ),
         )
             .join()
@@ -1102,6 +1152,9 @@ impl FigureMgr {
                 terrain,
                 ground_vel: physics.ground_vel,
             };
+
+            #[cfg(feature = "plugins")]
+            let mut plugins = ecs.write_resource::<common_state::plugin::PluginMgr>();
 
             match body {
                 Body::Humanoid(body) => {
@@ -2424,6 +2477,24 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
+                    let heads = heads
+                        .and_then(|heads| {
+                            let res = heads.heads().try_into().ok();
+
+                            if res.is_none() {
+                                tracing::error!(
+                                    "Server sent another amount of heads than 3 for a \
+                                     QuadrupedLow body"
+                                );
+                            }
+                            res
+                        })
+                        .unwrap_or([
+                            HeadState::Attached,
+                            HeadState::Attached,
+                            HeadState::Attached,
+                        ]);
+
                     let target_base = match (
                         physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
@@ -2433,7 +2504,7 @@ impl FigureMgr {
                         (true, false, false) => {
                             anim::quadruped_low::IdleAnimation::update_skeleton(
                                 &QuadrupedLowSkeleton::default(),
-                                time,
+                                (time, heads),
                                 state.state_time,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -2450,6 +2521,7 @@ impl FigureMgr {
                                 time,
                                 rel_avg_vel,
                                 state.acc_vel,
+                                heads,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2466,6 +2538,7 @@ impl FigureMgr {
                                 time,
                                 rel_avg_vel,
                                 state.acc_vel,
+                                heads,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2482,6 +2555,7 @@ impl FigureMgr {
                                 time,
                                 rel_avg_vel,
                                 state.acc_vel,
+                                heads,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2616,6 +2690,7 @@ impl FigureMgr {
                             anim::quadruped_low::TailwhipAnimation::update_skeleton(
                                 &target_base,
                                 (
+                                    ability_id,
                                     rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
@@ -2749,6 +2824,7 @@ impl FigureMgr {
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
+                                    heads,
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -2774,7 +2850,7 @@ impl FigureMgr {
                             };
                             anim::quadruped_low::LeapShockAnimation::update_skeleton(
                                 &target_base,
-                                (ability_id, rel_vel, time, Some(s.stage_section)),
+                                (ability_id, rel_vel, time, Some(s.stage_section), heads),
                                 stage_progress,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -3352,6 +3428,7 @@ impl FigureMgr {
                             anim::biped_small::DashAnimation::update_skeleton(
                                 &target_base,
                                 (
+                                    ability_id,
                                     rel_vel,
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -4147,144 +4224,88 @@ impl FigureMgr {
                         ),
                     };
                     let target_bones = match &character {
-                        CharacterState::ComboMelee2(s) => {
-                            let timer = s.timer.as_secs_f32();
-                            let current_strike = s.completed_strikes % s.static_data.strikes.len();
-                            let strike_data = s.static_data.strikes[current_strike];
-                            let progress = match s.stage_section {
-                                StageSection::Buildup => {
-                                    timer / strike_data.buildup_duration.as_secs_f32()
-                                },
-                                StageSection::Action => {
-                                    timer / strike_data.swing_duration.as_secs_f32()
-                                },
-                                StageSection::Recover => {
-                                    timer / strike_data.recover_duration.as_secs_f32()
-                                },
-                                _ => 0.0,
+                        CharacterState::BasicRanged(_)
+                        | CharacterState::DashMelee(_)
+                        | CharacterState::LeapMelee(_)
+                        | CharacterState::LeapShockwave(_)
+                        | CharacterState::SpriteSummon(_) => {
+                            let timer = character.timer();
+                            let stage_section = character.stage_section();
+                            let durations = character.durations();
+                            let progress = if let Some(((timer, stage_section), durations)) =
+                                timer.zip(stage_section).zip(durations)
+                            {
+                                let base_dur = match stage_section {
+                                    StageSection::Buildup => durations.buildup,
+                                    StageSection::Charge => durations.charge,
+                                    StageSection::Movement => durations.movement,
+                                    StageSection::Action => durations.action,
+                                    StageSection::Recover => durations.recover,
+                                };
+                                if let Some(base_dur) = base_dur {
+                                    timer.as_secs_f32() / base_dur.as_secs_f32()
+                                } else {
+                                    timer.as_secs_f32()
+                                }
+                            } else {
+                                0.0
                             };
 
-                            anim::arthropod::ComboAnimation::update_skeleton(
+                            anim::arthropod::BasicAction::update_skeleton(
                                 &target_base,
-                                (
+                                anim::arthropod::BasicActionDependency {
                                     ability_id,
-                                    s.stage_section,
-                                    current_strike,
-                                    time,
-                                    state.state_time,
-                                ),
+                                    stage_section,
+                                    global_time: time,
+                                    timer: state.state_time,
+                                },
                                 progress,
                                 &mut state_animation_rate,
                                 skeleton_attr,
                             )
                         },
-                        CharacterState::LeapMelee(s) => {
-                            let stage_time = s.timer.as_secs_f32();
-                            let stage_progress = match s.stage_section {
-                                StageSection::Buildup => {
-                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
-                                },
-                                StageSection::Movement => {
-                                    stage_time / s.static_data.movement_duration.as_secs_f32()
-                                },
-                                StageSection::Action => {
-                                    stage_time / s.static_data.swing_duration.as_secs_f32()
-                                },
-                                StageSection::Recover => {
-                                    stage_time / s.static_data.recover_duration.as_secs_f32()
-                                },
-                                _ => 0.0,
+                        CharacterState::ComboMelee2(_) => {
+                            let timer = character.timer();
+                            let stage_section = character.stage_section();
+                            let durations = character.durations();
+                            let progress = if let Some(((timer, stage_section), durations)) =
+                                timer.zip(stage_section).zip(durations)
+                            {
+                                let base_dur = match stage_section {
+                                    StageSection::Buildup => durations.buildup,
+                                    StageSection::Charge => durations.charge,
+                                    StageSection::Movement => durations.movement,
+                                    StageSection::Action => durations.action,
+                                    StageSection::Recover => durations.recover,
+                                };
+                                if let Some(base_dur) = base_dur {
+                                    timer.as_secs_f32() / base_dur.as_secs_f32()
+                                } else {
+                                    timer.as_secs_f32()
+                                }
+                            } else {
+                                0.0
                             };
-                            anim::arthropod::LeapMeleeAnimation::update_skeleton(
-                                &target_base,
-                                (
-                                    rel_vel.magnitude(),
-                                    time,
-                                    Some(s.stage_section),
-                                    state.state_time,
+
+                            let (current_action, max_actions) = match character {
+                                CharacterState::ComboMelee2(s) => (
+                                    (s.completed_strikes % s.static_data.strikes.len()) as u32,
+                                    Some(s.static_data.strikes.len() as u32),
                                 ),
-                                stage_progress,
-                                &mut state_animation_rate,
-                                skeleton_attr,
-                            )
-                        },
-                        CharacterState::SpriteSummon(s) => {
-                            let stage_time = s.timer.as_secs_f32();
-                            let stage_progress = match s.stage_section {
-                                StageSection::Buildup => {
-                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
-                                },
-                                StageSection::Action => {
-                                    stage_time / s.static_data.cast_duration.as_secs_f32()
-                                },
-                                StageSection::Recover => {
-                                    stage_time / s.static_data.recover_duration.as_secs_f32()
-                                },
-                                _ => 0.0,
+                                _ => (0, None),
                             };
-                            anim::arthropod::SummonAnimation::update_skeleton(
+
+                            anim::arthropod::MultiAction::update_skeleton(
                                 &target_base,
-                                (
-                                    rel_vel.magnitude(),
-                                    time,
-                                    Some(s.stage_section),
-                                    state.state_time,
-                                ),
-                                stage_progress,
-                                &mut state_animation_rate,
-                                skeleton_attr,
-                            )
-                        },
-                        CharacterState::DashMelee(s) => {
-                            let stage_time = s.timer.as_secs_f32();
-                            let stage_progress = match s.stage_section {
-                                StageSection::Buildup => {
-                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                anim::arthropod::MultiActionDependency {
+                                    ability_id,
+                                    stage_section,
+                                    current_action,
+                                    max_actions,
+                                    global_time: time,
+                                    timer: state.state_time,
                                 },
-                                StageSection::Charge => {
-                                    stage_time / s.static_data.charge_duration.as_secs_f32()
-                                },
-                                StageSection::Action => {
-                                    stage_time / s.static_data.swing_duration.as_secs_f32()
-                                },
-                                StageSection::Recover => {
-                                    stage_time / s.static_data.recover_duration.as_secs_f32()
-                                },
-                                _ => 0.0,
-                            };
-                            anim::arthropod::DashAnimation::update_skeleton(
-                                &target_base,
-                                (
-                                    rel_vel.magnitude(),
-                                    time,
-                                    Some(s.stage_section),
-                                    state.state_time,
-                                ),
-                                stage_progress,
-                                &mut state_animation_rate,
-                                skeleton_attr,
-                            )
-                        },
-                        CharacterState::BasicRanged(s) => {
-                            let stage_time = s.timer.as_secs_f32();
-                            let stage_progress = match s.stage_section {
-                                StageSection::Buildup => {
-                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
-                                },
-                                StageSection::Recover => {
-                                    stage_time / s.static_data.recover_duration.as_secs_f32()
-                                },
-                                _ => 0.0,
-                            };
-                            anim::arthropod::ShootAnimation::update_skeleton(
-                                &target_base,
-                                (
-                                    rel_vel.magnitude(),
-                                    time,
-                                    Some(s.stage_section),
-                                    state.state_time,
-                                ),
-                                stage_progress,
+                                progress,
                                 &mut state_animation_rate,
                                 skeleton_attr,
                             )
@@ -4320,38 +4341,6 @@ impl FigureMgr {
                                     )
                                 },
                             }
-                        },
-                        CharacterState::LeapShockwave(s) => {
-                            let stage_time = s.timer.as_secs_f32();
-                            let stage_progress = match s.stage_section {
-                                StageSection::Buildup => {
-                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
-                                },
-                                StageSection::Movement => {
-                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
-                                },
-                                StageSection::Action => {
-                                    stage_time / s.static_data.swing_duration.as_secs_f32()
-                                },
-                                StageSection::Recover => {
-                                    stage_time / s.static_data.recover_duration.as_secs_f32()
-                                },
-                                _ => 0.0,
-                            };
-
-                            anim::arthropod::LeapShockAnimation::update_skeleton(
-                                &target_base,
-                                (
-                                    active_tool_kind,
-                                    second_tool_kind,
-                                    rel_vel,
-                                    time,
-                                    Some(s.stage_section),
-                                ),
-                                stage_progress,
-                                &mut state_animation_rate,
-                                skeleton_attr,
-                            )
                         },
                         // TODO!
                         _ => target_base,
@@ -6186,6 +6175,95 @@ impl FigureMgr {
                         body,
                     );
                 },
+                Body::Plugin(body) => {
+                    #[cfg(feature = "plugins")]
+                    {
+                        let (model, _skeleton_attr) = self.plugin_model_cache.get_or_create_model(
+                            renderer,
+                            &mut self.atlas,
+                            body,
+                            inventory,
+                            (),
+                            tick,
+                            viewpoint_camera_mode,
+                            viewpoint_character_state,
+                            &slow_jobs,
+                            None,
+                        );
+
+                        let state = self.states.plugin_states.entry(entity).or_insert_with(|| {
+                            FigureState::new(renderer, PluginSkeleton::default(), body)
+                        });
+
+                        // Average velocity relative to the current ground
+                        let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
+                        let idle_state = CharacterState::Idle(idle::Data::default());
+                        let last = Last(idle_state.clone());
+                        let (character, last_character) = match (character, last_character) {
+                            (Some(c), Some(l)) => (c, l),
+                            _ => (&idle_state, &last),
+                        };
+
+                        if !character.same_variant(&last_character.0) {
+                            state.state_time = 0.0;
+                        }
+
+                        let char_state = match character {
+                            CharacterState::BasicMelee(_) => {
+                                common_state::plugin::module::CharacterState::Melee
+                            },
+                            CharacterState::Sit { .. } => {
+                                common_state::plugin::module::CharacterState::Feed
+                            },
+                            CharacterState::Stunned(_) => {
+                                common_state::plugin::module::CharacterState::Stunned
+                            },
+                            _ if physics.on_ground.is_none() => {
+                                common_state::plugin::module::CharacterState::Jump
+                            },
+                            _ if physics.in_liquid().is_some() => {
+                                common_state::plugin::module::CharacterState::Swim
+                            },
+                            _ if rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR => {
+                                common_state::plugin::module::CharacterState::Run
+                            },
+                            _ => common_state::plugin::module::CharacterState::Idle,
+                        };
+
+                        if let Some(bodyobj) = plugins.create_body("lizard") {
+                            let dep = common_state::plugin::module::Dependency {
+                                velocity: state.avg_vel.into_tuple(),
+                                ori: ori.into_vec4().into_tuple(),
+                                last_ori: state.last_ori.into_vec4().into_tuple(),
+                                global_time: time,
+                                avg_vel: rel_avg_vel.into_tuple(),
+                                state: char_state,
+                            };
+
+                            if let Some(target_bones) =
+                                plugins.update_skeleton(&bodyobj, &dep, time)
+                            {
+                                state.skeleton = Lerp::lerp(
+                                    &state.skeleton,
+                                    &PluginSkeleton::from_module(target_bones),
+                                    dt_lerp,
+                                );
+                                state.update(
+                                    renderer,
+                                    trail_mgr,
+                                    &mut update_buf,
+                                    &common_params,
+                                    state_animation_rate,
+                                    model,
+                                    body,
+                                );
+                            }
+                        }
+                    }
+                    #[cfg(not(feature = "plugins"))]
+                    let _ = body;
+                },
             }
         }
 
@@ -6542,6 +6620,8 @@ impl FigureMgr {
             volume_model_cache,
             arthropod_model_cache,
             crustacean_model_cache,
+            #[cfg(feature = "plugins")]
+            plugin_model_cache,
             states:
                 FigureMgrStates {
                     character_states,
@@ -6563,6 +6643,8 @@ impl FigureMgr {
                     volume_states,
                     arthropod_states,
                     crustacean_states,
+                    #[cfg(feature = "plugins")]
+                    plugin_states,
                 },
         } = self;
         let atlas = atlas_;
@@ -6935,6 +7017,35 @@ impl FigureMgr {
                     None
                 }
             },
+            Body::Plugin(body) => {
+                #[cfg(not(feature = "plugins"))]
+                {
+                    let _ = body;
+                    unreachable!("Plugins require feature");
+                }
+                #[cfg(feature = "plugins")]
+                {
+                    plugin_states
+                        .get(&entity)
+                        .filter(|state| filter_state(state))
+                        .map(move |state| {
+                            (
+                                state.bound(),
+                                plugin_model_cache
+                                    .get_model(
+                                        atlas,
+                                        body,
+                                        inventory,
+                                        tick,
+                                        viewpoint_camera_mode,
+                                        character_state,
+                                        item_key,
+                                    )
+                                    .map(ModelEntryRef::Figure),
+                            )
+                        })
+                }
+            },
         } {
             let model_entry = model_entry?;
 
@@ -7014,6 +7125,155 @@ impl FigureMgr {
             },
             _ => None,
         }
+    }
+
+    pub fn get_heads(&self, scene_data: &SceneData, entity: EcsEntity) -> &[anim::vek::Vec3<f32>] {
+        scene_data
+            .state
+            .ecs()
+            .read_storage::<Body>()
+            .get(entity)
+            .and_then(|b| match b {
+                Body::Humanoid(_) => self
+                    .states
+                    .character_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::QuadrupedSmall(_) => self
+                    .states
+                    .quadruped_small_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::QuadrupedMedium(_) => self
+                    .states
+                    .quadruped_medium_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::BirdMedium(_) => self
+                    .states
+                    .bird_medium_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::FishMedium(_) => self
+                    .states
+                    .fish_medium_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Dragon(_) => self
+                    .states
+                    .dragon_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::BirdLarge(_) => self
+                    .states
+                    .bird_large_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::FishSmall(_) => self
+                    .states
+                    .fish_small_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::BipedLarge(_) => self
+                    .states
+                    .biped_large_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::BipedSmall(_) => self
+                    .states
+                    .biped_small_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Golem(_) => self
+                    .states
+                    .golem_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Theropod(_) => self
+                    .states
+                    .theropod_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::QuadrupedLow(_) => self
+                    .states
+                    .quadruped_low_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Arthropod(_) => self
+                    .states
+                    .arthropod_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Object(_) => self
+                    .states
+                    .object_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Ship(_) => self
+                    .states
+                    .ship_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::ItemDrop(_) => self
+                    .states
+                    .item_drop_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Crustacean(_) => self
+                    .states
+                    .crustacean_states
+                    .get(&entity)
+                    .map(|state| &state.heads),
+                Body::Plugin(_) => {
+                    #[cfg(not(feature = "plugins"))]
+                    unreachable!("Plugins require feature");
+                    #[cfg(feature = "plugins")]
+                    self.states
+                        .plugin_states
+                        .get(&entity)
+                        .map(|state| &state.heads)
+                },
+            })
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    pub fn get_tail(
+        &self,
+        scene_data: &SceneData,
+        entity: EcsEntity,
+    ) -> Option<(anim::vek::Vec3<f32>, anim::vek::Vec3<f32>)> {
+        scene_data
+            .state
+            .ecs()
+            .read_storage::<Body>()
+            .get(entity)
+            .and_then(|b| match b {
+                Body::Humanoid(_) => self.states.character_states.get(&entity)?.tail,
+                Body::QuadrupedSmall(_) => self.states.quadruped_small_states.get(&entity)?.tail,
+                Body::QuadrupedMedium(_) => self.states.quadruped_medium_states.get(&entity)?.tail,
+                Body::BirdMedium(_) => self.states.bird_medium_states.get(&entity)?.tail,
+                Body::FishMedium(_) => self.states.fish_medium_states.get(&entity)?.tail,
+                Body::Dragon(_) => self.states.dragon_states.get(&entity)?.tail,
+                Body::BirdLarge(_) => self.states.bird_large_states.get(&entity)?.tail,
+                Body::FishSmall(_) => self.states.fish_small_states.get(&entity)?.tail,
+                Body::BipedLarge(_) => self.states.biped_large_states.get(&entity)?.tail,
+                Body::BipedSmall(_) => self.states.biped_small_states.get(&entity)?.tail,
+                Body::Golem(_) => self.states.golem_states.get(&entity)?.tail,
+                Body::Theropod(_) => self.states.theropod_states.get(&entity)?.tail,
+                Body::QuadrupedLow(_) => self.states.quadruped_low_states.get(&entity)?.tail,
+                Body::Arthropod(_) => self.states.arthropod_states.get(&entity)?.tail,
+                Body::Object(_) => self.states.object_states.get(&entity)?.tail,
+                Body::Ship(_) => self.states.ship_states.get(&entity)?.tail,
+                Body::ItemDrop(_) => self.states.item_drop_states.get(&entity)?.tail,
+                Body::Crustacean(_) => self.states.crustacean_states.get(&entity)?.tail,
+                Body::Plugin(_) => {
+                    #[cfg(not(feature = "plugins"))]
+                    unreachable!("Plugins require feature");
+                    #[cfg(feature = "plugins")]
+                    self.states.plugin_states.get(&entity)?.tail
+                },
+            })
     }
 
     pub fn viewpoint_offset(&self, scene_data: &SceneData, entity: EcsEntity) -> Vec3<f32> {
@@ -7113,6 +7373,17 @@ impl FigureMgr {
                     .crustacean_states
                     .get(&entity)
                     .and_then(|state| state.viewpoint_offset),
+                Body::Plugin(_) => {
+                    #[cfg(not(feature = "plugins"))]
+                    unreachable!("Plugins require feature");
+                    #[cfg(feature = "plugins")]
+                    {
+                        self.states
+                            .plugin_states
+                            .get(&entity)
+                            .and_then(|state| state.viewpoint_offset)
+                    }
+                },
             })
             .map(|viewpoint| viewpoint.into())
             .unwrap_or_else(Vec3::zero)
@@ -7292,6 +7563,8 @@ impl FigureAtlas {
 pub struct FigureStateMeta {
     lantern_offset: Option<anim::vek::Vec3<f32>>,
     viewpoint_offset: Option<anim::vek::Vec3<f32>>,
+    heads: Vec<anim::vek::Vec3<f32>>,
+    tail: Option<(anim::vek::Vec3<f32>, anim::vek::Vec3<f32>)>,
     main_abs_trail_points: Option<(anim::vek::Vec3<f32>, anim::vek::Vec3<f32>)>,
     off_abs_trail_points: Option<(anim::vek::Vec3<f32>, anim::vek::Vec3<f32>)>,
     // Animation to be applied to rider of this entity
@@ -7411,6 +7684,8 @@ impl<S: Skeleton, D: FigureData> FigureState<S, D> {
             meta: FigureStateMeta {
                 lantern_offset: offsets.lantern,
                 viewpoint_offset: offsets.viewpoint,
+                heads: offsets.heads.clone(),
+                tail: offsets.tail,
                 main_abs_trail_points: None,
                 off_abs_trail_points: None,
                 mount_transform: offsets.mount_bone,
@@ -7593,6 +7868,8 @@ impl<S: Skeleton, D: FigureData> FigureState<S, D> {
         renderer.update_consts(&mut self.meta.bound.1, &new_bone_consts[0..S::BONE_COUNT]);
         self.lantern_offset = offsets.lantern;
         self.viewpoint_offset = offsets.viewpoint;
+        self.heads.clone_from(&offsets.heads);
+        self.tail = offsets.tail;
         // Handle weapon trails
         fn handle_weapon_trails(
             trail_mgr: &mut TrailMgr,

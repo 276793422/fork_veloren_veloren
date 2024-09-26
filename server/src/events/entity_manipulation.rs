@@ -27,9 +27,9 @@ use common::{
         inventory::item::{AbilityMap, MaterialStatManifest},
         item::flatten_counted_items,
         loot_owner::LootOwnerKind,
-        Alignment, Auras, Body, CharacterState, Energy, Group, Health, Inventory, Object,
-        PickupItem, Player, Poise, PoiseChange, Pos, Presence, PresenceKind, SkillSet, Stats,
-        BASE_ABILITY_LIMIT,
+        Alignment, Auras, Body, BuffEffect, CharacterState, Energy, Group, Hardcore, Health,
+        Inventory, Object, PickupItem, Player, Poise, PoiseChange, Pos, Presence, PresenceKind,
+        SkillSet, Stats, BASE_ABILITY_LIMIT,
     },
     consts::TELEPORTER_RADIUS,
     event::{
@@ -37,8 +37,8 @@ use common::{
         ChatEvent, ComboChangeEvent, CreateItemDropEvent, CreateNpcEvent, CreateObjectEvent,
         DeleteEvent, DestroyEvent, EmitExt, Emitter, EnergyChangeEvent, EntityAttackedHookEvent,
         EventBus, ExplosionEvent, HealthChangeEvent, KnockbackEvent, LandOnGroundEvent,
-        MakeAdminEvent, ParryHookEvent, PoiseChangeEvent, RemoveLightEmitterEvent, RespawnEvent,
-        SoundEvent, StartTeleportingEvent, TeleportToEvent, TeleportToPositionEvent,
+        MakeAdminEvent, ParryHookEvent, PoiseChangeEvent, RegrowHeadEvent, RemoveLightEmitterEvent,
+        RespawnEvent, SoundEvent, StartTeleportingEvent, TeleportToEvent, TeleportToPositionEvent,
         TransformEvent, UpdateMapMarkerEvent,
     },
     event_emitters,
@@ -57,7 +57,7 @@ use common::{
     vol::ReadVol,
     CachedSpatialGrid, Damage, DamageKind, DamageSource, GroupTarget, RadiusEffect,
 };
-use common_net::{msg::ServerGeneral, sync::WorldSyncExt};
+use common_net::{msg::ServerGeneral, sync::WorldSyncExt, synced_components::Heads};
 use common_state::{AreasContainer, BlockChange, NoDurabilityArea};
 use hashbrown::HashSet;
 use rand::Rng;
@@ -100,6 +100,7 @@ pub(super) fn register_event_systems(builder: &mut DispatcherBuilder) {
     event_dispatch::<RemoveLightEmitterEvent>(builder);
     event_dispatch::<TeleportToPositionEvent>(builder);
     event_dispatch::<StartTeleportingEvent>(builder);
+    event_dispatch::<RegrowHeadEvent>(builder);
 }
 
 event_emitters! {
@@ -167,24 +168,53 @@ impl ServerEvent for HealthChangeEvent {
     type SystemData<'a> = (
         Entities<'a>,
         Read<'a, EventBus<Outcome>>,
+        Read<'a, Time>,
         ReadStorage<'a, Pos>,
         ReadStorage<'a, Uid>,
         WriteStorage<'a, Agent>,
         WriteStorage<'a, Health>,
+        WriteStorage<'a, Heads>,
     );
 
     fn handle(
         events: impl ExactSizeIterator<Item = Self>,
-        (entities, outcomes, positions, uids, mut agents, mut healths): Self::SystemData<'_>,
+        (entities, outcomes, time, positions, uids, mut agents, mut healths, mut heads): Self::SystemData<
+            '_,
+        >,
     ) {
         let mut outcomes_emitter = outcomes.emitter();
+        let mut rng = rand::thread_rng();
         for ev in events {
-            if let Some((mut health, pos, uid)) = (&mut healths, positions.maybe(), uids.maybe())
+            if let Some((mut health, pos, uid, heads)) = (
+                &mut healths,
+                positions.maybe(),
+                uids.maybe(),
+                (&mut heads).maybe(),
+            )
                 .lend_join()
                 .get(ev.entity, &entities)
             {
                 // If the change amount was not zero
                 let changed = health.change_by(ev.change);
+                if let Some(mut heads) = heads {
+                    // We want some hp to be left for a headless body, so we divide by (max amount
+                    // of heads + 2)
+                    let hp_per_head = health.maximum() / (heads.capacity() as f32 + 2.0);
+                    let target_heads = (health.current() / hp_per_head) as usize;
+                    if heads.amount() > 0 && ev.change.amount < 0.0 && heads.amount() > target_heads
+                    {
+                        for _ in target_heads..heads.amount() {
+                            if let Some(head) = heads.remove_one(&mut rng, *time) {
+                                if let Some(uid) = uid {
+                                    outcomes_emitter.emit(Outcome::HeadLost { uid: *uid, head });
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 if let (Some(pos), Some(uid)) = (pos, uid) {
                     if changed {
                         outcomes_emitter.emit(Outcome::HealthChange {
@@ -952,7 +982,9 @@ impl ServerEvent for RespawnEvent {
         WriteStorage<'a, Pos>,
         WriteStorage<'a, comp::PhysicsState>,
         WriteStorage<'a, comp::ForceUpdate>,
+        WriteStorage<'a, Heads>,
         ReadStorage<'a, Client>,
+        ReadStorage<'a, Hardcore>,
         ReadStorage<'a, comp::Waypoint>,
     );
 
@@ -965,12 +997,15 @@ impl ServerEvent for RespawnEvent {
             mut positions,
             mut physic_states,
             mut force_updates,
+            mut heads,
             clients,
+            hardcore,
             waypoints,
         ): Self::SystemData<'_>,
     ) {
         for RespawnEvent(entity) in events {
-            if clients.contains(entity) {
+            // Hardcore characters cannot respawn
+            if !hardcore.contains(entity) && clients.contains(entity) {
                 let respawn_point = waypoints
                     .get(entity)
                     .map(|wp| wp.get_pos())
@@ -979,6 +1014,7 @@ impl ServerEvent for RespawnEvent {
                 healths.get_mut(entity).map(|mut health| health.revive());
                 combos.get_mut(entity).map(|mut combo| combo.reset());
                 positions.get_mut(entity).map(|pos| pos.0 = respawn_point);
+                heads.get_mut(entity).map(|mut heads| heads.reset());
                 physic_states
                     .get_mut(entity)
                     .map(|phys_state| phys_state.reset());
@@ -1319,7 +1355,7 @@ impl ServerEvent for ExplosionEvent {
                                 };
 
                                 let target_dodging = char_state_b_maybe
-                                    .and_then(|cs| cs.attack_immunities())
+                                    .and_then(|cs| cs.roll_attack_immunities())
                                     .map_or(false, |i| i.explosions);
                                 let allow_friendly_fire =
                                     owner_entity.is_some_and(|owner_entity| {
@@ -1630,9 +1666,19 @@ impl ServerEvent for BuffEvent {
                 use buff::BuffChange;
                 match ev.buff_change {
                     BuffChange::Add(new_buff) => {
+                        let immunity_by_buff = buffs
+                            .buffs
+                            .values_mut()
+                            .flat_map(|b| b.kind.effects(&b.data))
+                            .find(|b| match b {
+                                BuffEffect::BuffImmunity(kind) => new_buff.kind == *kind,
+                                _ => false,
+                            });
+
                         if !bodies
                             .get(ev.entity)
                             .map_or(false, |body| body.immune_to(new_buff.kind))
+                            && immunity_by_buff.is_none()
                             && healths.get(ev.entity).map_or(true, |h| !h.is_dead)
                         {
                             if let Some(strength) =
@@ -1738,6 +1784,9 @@ impl ServerEvent for EnergyChangeEvent {
         for ev in events {
             if let Some(mut energy) = energies.get_mut(ev.entity) {
                 energy.change_by(ev.change);
+                if ev.reset_rate {
+                    energy.reset_regen_rate();
+                }
             }
         }
     }
@@ -1813,6 +1862,7 @@ impl ServerEvent for ParryHookEvent {
                         energy_change_emitter.emit(EnergyChangeEvent {
                             entity: ev.defender,
                             change: c.static_data.energy_regen,
+                            reset_rate: false,
                         });
                         c.is_parry = true;
                         false
@@ -2039,6 +2089,7 @@ impl ServerEvent for EntityAttackedHookEvent {
                             emitters.emit(EnergyChangeEvent {
                                 entity: ev.entity,
                                 change: *e,
+                                reset_rate: false,
                             });
                         },
                     }
@@ -2388,6 +2439,7 @@ pub fn transform_entity(
                     comp::ActiveAbilities::default()
                 }),
             )?;
+            set_or_remove_component(server, entity, body.heads().map(Heads::new))?;
 
             // Don't add Agent or ItemDrops to players
             if !is_player {
@@ -2419,4 +2471,39 @@ pub fn transform_entity(
     }
 
     Ok(())
+}
+
+impl ServerEvent for RegrowHeadEvent {
+    type SystemData<'a> = (
+        Read<'a, EventBus<HealthChangeEvent>>,
+        Read<'a, Time>,
+        WriteStorage<'a, Heads>,
+        ReadStorage<'a, Health>,
+    );
+
+    fn handle(
+        events: impl ExactSizeIterator<Item = Self>,
+        (health_change_events, time, mut heads, healths): Self::SystemData<'_>,
+    ) {
+        let mut health_change_emitter = health_change_events.emitter();
+        for ev in events {
+            if let Some(mut heads) = heads.get_mut(ev.entity)
+                && heads.regrow_oldest()
+                && let Some(health) = healths.get(ev.entity)
+            {
+                let amount = 1.0 / (heads.capacity() as f32) * health.maximum();
+                health_change_emitter.emit(HealthChangeEvent {
+                    entity: ev.entity,
+                    change: comp::HealthChange {
+                        amount,
+                        by: None,
+                        cause: Some(DamageSource::Other),
+                        time: *time,
+                        precise: false,
+                        instance: rand::random(),
+                    },
+                })
+            }
+        }
+    }
 }

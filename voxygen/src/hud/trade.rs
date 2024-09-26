@@ -13,6 +13,7 @@ use common::{
         inventory::item::{ItemDesc, ItemI18n, MaterialStatManifest, Quality},
         Inventory, Stats,
     },
+    recipe::RecipeBookManifest,
     trade::{PendingTrade, SitePrices, TradeAction, TradePhase},
 };
 use common_net::sync::WorldSyncExt;
@@ -102,6 +103,7 @@ pub struct Trade<'a> {
     localized_strings: &'a Localization,
     item_i18n: &'a ItemI18n,
     msm: &'a MaterialStatManifest,
+    rbm: &'a RecipeBookManifest,
     pulse: f32,
     show: &'a mut Show,
     needs_thirdconfirm: bool,
@@ -121,6 +123,7 @@ impl<'a> Trade<'a> {
         localized_strings: &'a Localization,
         item_i18n: &'a ItemI18n,
         msm: &'a MaterialStatManifest,
+        rbm: &'a RecipeBookManifest,
         pulse: f32,
         show: &'a mut Show,
     ) -> Self {
@@ -138,6 +141,7 @@ impl<'a> Trade<'a> {
             localized_strings,
             item_i18n,
             msm,
+            rbm,
             pulse,
             show,
             needs_thirdconfirm: false,
@@ -387,6 +391,7 @@ impl<'a> Trade<'a> {
             self.item_imgs,
             self.pulse,
             self.msm,
+            self.rbm,
             self.localized_strings,
             self.item_i18n,
         )

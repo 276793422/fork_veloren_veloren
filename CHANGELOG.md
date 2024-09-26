@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Craftable orichalcum helmet
 - Protocol to query game server information (player count, version, etc.) and make ping tests.
 - Unlockable recipes
+- Localization support for prompt dialogs, diary sections, trade and group invitations, command descriptions.
+- Added Freezing Potion
+- Clear command to delete chat messages.
+- List unlocked recipes from recipe scroll items in tooltips
+- Hydra.
+- NPC animations in plugins, multiple types of plugins
 
 ### Changed
 
@@ -37,8 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved Mindflayer anticheese measures.
 - Recipe pricing with NPCs.
 - Broad entity and loot updates to Gnarling Fortifications
+- Reworked spacing and labels in crafting menu.
+- Reworked design of repair equipment interface in crafting menu.
+- Help command can be used on client commands too.
+- Sword animations.
 
 ### Removed
+
+- Obsolete localization keys
+- Help Window option in interface settings
 
 ### Fixed
 
@@ -47,11 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Loot protection for solo players and NPCs works again
 - New cultist dungeons are less overly abundant, sahagin dungeons spawn again.
 - Cultist dungeons now always have exactly one portal which leads to the boss room.
-- Prompt dialogs are now localized.
 - Image-export for wiki now produces correct images of items as they look like in-game.
 - Limit the minimum vertical scaling value in the world generation UI to 0.1 to prevent an overflow
 - Wood log and worker/linen clothing pricing.
 - Charm recipes can now be found in the Potions tab of the crafting menu
+- Black minimap when some terrain blocks are deleted.
+- Text overflow and flickering in the crafting menu.
+- Crash when deleting entries from the server list.
+- Active buttons in repair equipment interface when missing requirements.
+- Ability to send trade requests to every entity.
+- Naming of entries in controls settings.
+- Percentage values in descriptions of potion sickness and agility potion.
 
 ## [0.16.0] - 2024-03-30
 

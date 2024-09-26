@@ -307,7 +307,8 @@ impl Body {
                 | object::Body::Pumpkin4
                 | object::Body::Pumpkin5
                 | object::Body::Pebble
-                | object::Body::IronPikeBomb => {
+                | object::Body::IronPikeBomb
+                | object::Body::StrigoiHead => {
                     let dim = self.dimensions().map(|a| a * 0.5 * scale);
                     const CD: f32 = 0.5;
                     CD * PI * dim.x * dim.z
@@ -332,6 +333,8 @@ impl Body {
                 let dim = self.dimensions().map(|a| a * scale);
                 (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
             },
+
+            Body::Plugin(body) => body.parasite_drag(),
         }
     }
 }

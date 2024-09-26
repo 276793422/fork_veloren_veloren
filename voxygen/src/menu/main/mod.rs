@@ -23,6 +23,7 @@ use common_state::plugin::PluginMgr;
 use i18n::LocalizationHandle;
 #[cfg(feature = "singleplayer")]
 use server::ServerInitStage;
+#[cfg(feature = "singleplayer")]
 use specs::WorldExt;
 use std::{path::Path, sync::Arc};
 use tokio::runtime;
@@ -283,6 +284,7 @@ impl PlayState for MainMenuState {
                                 );
                                 self.init = InitState::None;
                             },
+                            #[cfg_attr(not(feature = "plugins"), allow(unused_variables))]
                             client::Event::PluginDataReceived(data) => {
                                 #[cfg(feature = "plugins")]
                                 {
@@ -378,7 +380,8 @@ impl PlayState for MainMenuState {
                     let validate_tls = net_settings.validate_tls;
                     net_settings.username.clone_from(&username);
                     net_settings.default_server.clone_from(&server_address);
-                    if !net_settings.servers.contains(&server_address) {
+                    if !server_address.is_empty() && !net_settings.servers.contains(&server_address)
+                    {
                         net_settings.servers.push(server_address.clone());
                     }
                     global_state

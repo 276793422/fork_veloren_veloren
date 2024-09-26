@@ -689,6 +689,7 @@ fn execute_effect(
             rate,
             kind,
             tick_dur,
+            reset_rate_on_tick,
         } => {
             if let Some(num_ticks) = num_ticks(*tick_dur) {
                 let amount = *rate * num_ticks * tick_dur.0 as f32;
@@ -700,6 +701,7 @@ fn execute_effect(
                 server_emitter.emit(EnergyChangeEvent {
                     entity,
                     change: amount,
+                    reset_rate: *reset_rate_on_tick,
                 });
             };
         },
@@ -790,12 +792,6 @@ fn execute_effect(
                 stat.poise_reduction.neg_mod += pr;
             }
         },
-        BuffEffect::HealReduction(red) => {
-            stat.heal_multiplier *= 1.0 - *red;
-        },
-        BuffEffect::MoveSpeedReduction(red) => {
-            stat.move_speed_multiplier *= 1.0 - *red;
-        },
         BuffEffect::PoiseDamageFromLostHealth(strength) => {
             stat.poise_damage_modifier *= 1.0 + (1.0 - health.fraction()) * *strength;
         },
@@ -854,6 +850,9 @@ fn execute_effect(
         BuffEffect::DisableAuxiliaryAbilities => stat.disable_auxiliary_abilities = true,
         BuffEffect::CrowdControlResistance(ccr) => {
             stat.crowd_control_resistance += ccr;
+        },
+        BuffEffect::ItemEffectReduction(ier) => {
+            stat.item_effect_reduction *= 1.0 - ier;
         },
     };
 }
